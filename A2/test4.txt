@@ -1,0 +1,145 @@
+// =========================================================
+// EDGE CASE TEST 4: Additional tricky scenarios
+// =========================================================
+
+// --- Unterminated string (no closing quote) ---
+// The lexer should handle partial strings gracefully.
+// Note: can't test unterminated string in same file without breaking
+// subsequent tests, so we test strings at boundaries instead.
+
+// --- Empty char constant '' (invalid) ---
+// This should NOT match the char constant rule.
+// '' should produce two UNKNOWN tokens (or two separate quotes)
+
+// --- 0x with no hex digits (invalid hex) ---
+// Should be: I_CONSTANT 0, then IDENTIFIER x
+0x
+0X
+
+// --- 0b101 (binary literal - not supported) ---
+// Should be: I_CONSTANT 0, IDENTIFIER b101
+0b101
+
+// --- Numbers immediately followed by identifiers ---
+// 123abc should be: I_CONSTANT 123, IDENTIFIER abc
+123abc
+0xFFghi
+
+// --- Deeply nested parens and brackets ---
+(((((((((())))))))))
+[[[[]]]]
+
+// --- Multiple operators in sequence ---
++-*/
+!~&|
+<><=>=
+
+// --- Equal signs chaining ---
+a=b=c=d
+
+// --- Very long chain of dots ---
+a.b.c.d.e.f.g
+
+// --- Mixed safe-dot and regular dot ---
+a?.b.c?.d.e?.f
+
+// --- Three-way comparison in expression context ---
+(a <=> b) + (c <=> d)
+
+// --- Power in complex expression ---
+a**b**c
+
+// --- Safe deref of function result ---
+func()?.field
+
+// --- Lambda in assignment ---
+f = () => 0;
+g = (x, y) => x + y;
+
+// --- Foreach over range ---
+foreach (i in range) {
+    match(i) {
+        case 0: break;
+        default: continue;
+    }
+}
+
+// --- All comparison operators together ---
+a<b
+a>b
+a<=b
+a>=b
+a==b
+a!=b
+a<=>b
+
+// --- Pointer operations ---
+*p
+&x
+p->field
+(*p).field
+
+// --- Sizeof variations ---
+sizeof(int)
+sizeof(char)
+sizeof(double)
+sizeof(struct Point)
+sizeof x
+
+// --- Multi-char operator sequences ---
+++--
+--++
+**++
+++-
+--+
+
+// --- Cast followed by operation ---
+(int)(x + y)
+(float)z * 2
+
+// --- Consecutive keywords ---
+if else
+for while
+do while
+break continue
+return void
+
+// --- Comment between tokens ---
+a /* comment */ b
+a /* multi
+line
+comment */ b
+
+// --- Hex float edge cases ---
+0xABCDEFp0
+0xabcdefP+0
+0x0.0p0
+0x0p0
+
+// --- Integer suffix edge cases ---
+0u
+0U
+0l
+0L
+0ul
+0UL
+0ull
+0ULL
+0ll
+0LL
+
+// --- Adjacent keywords and operators ---
+if(1)
+while(1)
+for(;;)
+switch(x)
+sizeof(x)
+return(0);
+
+// --- String with all escape sequences ---
+"\a\b\f\n\r\t\v\\\'\"\?\0\77\xFF"
+
+// --- Empty file content simulation (just whitespace) ---
+   	  	  
+
+// --- End marker ---
