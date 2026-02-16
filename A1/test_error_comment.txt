@@ -1,0 +1,5 @@
+// This test file has an unterminated block comment.
+// The lexer should detect this and report an error.
+int x = 5;
+/* this comment is never closed
+int y = 10;
