@@ -119,10 +119,20 @@ static int check_type(void)
     return IDENTIFIER;
 }
 
-int main()
+int main(int argc, char **argv)
 {
+    if (argc > 1) {
+        FILE *file = fopen(argv[1], "r");
+        if (!file) {
+            printf("Cannot open file\n");
+            return 1;
+        }
+        yyin = file;
+    }
+
     printf("Cyrix Lexer Started...\n");
     yylex();
     printf("Cyrix Lexer Finished.\n");
     return 0;
 }
+
