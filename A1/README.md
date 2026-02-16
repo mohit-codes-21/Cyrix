@@ -64,7 +64,6 @@ Removes:
 
 * `cyrix` executable
 * `lex.yy.c`
-* all `out*.txt` files
 
 ---
 

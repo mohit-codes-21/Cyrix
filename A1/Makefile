@@ -13,4 +13,4 @@ test%: $(TARGET)
 	./$(TARGET) test$*.txt > out$*.txt
 
 clean:
-	rm -f lex.yy.c $(TARGET) out*.txt
+	rm -f lex.yy.c $(TARGET) 
