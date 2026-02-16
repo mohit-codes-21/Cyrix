@@ -1,0 +1,71 @@
+Cyrix Lexer Started...
+INT
+IDENTIFIER: fun
+(
+)
+{
+IF
+(
+I_CONSTANT: 1
+)
+IDENTIFIER: a
+INC_OP
+;
+ELSE
+IF
+(
+I_CONSTANT: 0
+)
+IDENTIFIER: b
+INC_OP
+;
+ELSE
+IF
+(
+I_CONSTANT: 1
+)
+{
+IF
+(
+I_CONSTANT: 1
+)
+IDENTIFIER: a
+INC_OP
+;
+ELSE
+IF
+(
+I_CONSTANT: 0
+)
+IDENTIFIER: b
+INC_OP
+;
+ELSE
+IDENTIFIER: c
+INC_OP
+;
+}
+ELSE
+{
+IF
+(
+I_CONSTANT: 1
+)
+IDENTIFIER: a
+INC_OP
+;
+ELSE
+IF
+(
+I_CONSTANT: 0
+)
+IDENTIFIER: b
+INC_OP
+;
+ELSE
+IDENTIFIER: c
+INC_OP
+;
+}
+}
+Cyrix Lexer Finished.
