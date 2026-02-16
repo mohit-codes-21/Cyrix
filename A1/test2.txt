@@ -1,0 +1,78 @@
+// ===== Cyrix Full Lexer Test =====
+
+const int MAX = 10;
+
+var x = 5;
+var y = 3.14;
+var str = "hello";
+var p = &x;
+
+// Power operator
+x = x ** 2;
+
+// Safe pointer dereference
+p?.field;
+p ?. field;     // spacing variant
+p?.field2;
+
+// Multi-assignment
+a, b = b, a;
+x, y, z = 1, 2, 3;
+
+// Lambda expressions
+square = (n) => n * n;
+add = (a, b) => { return a + b; };
+
+// Foreach loops
+foreach(i in arr) {
+    x++;
+}
+
+foreach(c in "world") {
+    y--;
+}
+
+// Match expression
+match(x) {
+    case 1: x = 2;
+    case 2: x = 3;
+    default: x = 0;
+}
+
+// Default function arguments
+int fun(int a, int b = 10, int c = 20);
+
+// Mixed usage
+result = (x ** 2) + (y ** 3);
+
+// ===== Edge / Tricky Cases =====
+
+// Double power chaining
+val = 2 ** 3 ** 2;
+
+// Safe deref near dot
+obj?.a.b;
+obj ?. a ?. b;     // should still tokenize SAFE_DOT and DOT
+
+// Lambda without spaces
+f=(x)=>x+1;
+
+// Multi-assign with expressions
+m, n = x+1, y*2;
+
+// Foreach with spacing issues
+foreach ( k in arr ) { }
+
+// Match minimal
+match(y){default:y=1;}
+
+// const with pointer
+const char *name = "cyrix";
+
+// Operator confusion tests
+a***b;       // should be POW_OP + *
+a?.*b;       // SAFE_DOT then *
+x=>y;        // lambda arrow
+x= > y;      // '=' then '>' (NOT lambda)
+
+// ===== End =====

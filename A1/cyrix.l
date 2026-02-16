@@ -57,42 +57,65 @@ static int check_type(void);
 "switch"    { printf("SWITCH\n"); }
 "void"      { printf("VOID\n"); }
 "while"     { printf("WHILE\n"); }
+"var"      { printf("VAR\n"); }
+"foreach"  { printf("FOREACH\n"); }
+"in"       { printf("IN\n"); }
+"match"    { printf("MATCH\n"); }
+"const"    { printf("CONST\n"); }
 
 {L}{A}*     { check_type(); }
 
-{HP}{H}+{IS}?   { printf("I_CONSTANT: %s\n", yytext); }
-{NZ}{D}*{IS}?   { printf("I_CONSTANT: %s\n", yytext); }
-"0"{O}*{IS}?    { printf("I_CONSTANT: %s\n", yytext); }
+{HP}{H}+{IS}?            { printf("I_CONSTANT: %s\n", yytext); }
+{NZ}{D}*{IS}?            { printf("I_CONSTANT: %s\n", yytext); }
+"0"{O}*{IS}?             { printf("I_CONSTANT: %s\n", yytext); }
+{CP}?"'"([^'\\\n]|{ES})+"'" { printf("I_CONSTANT: %s\n", yytext); }
 
-{D}+{E}{FS}?        { printf("F_CONSTANT: %s\n", yytext); }
-{D}*"."{D}+{E}?{FS}? { printf("F_CONSTANT: %s\n", yytext); }
+{D}+{E}{FS}?                 { printf("F_CONSTANT: %s\n", yytext); }
+{D}*"."{D}+{E}?{FS}?         { printf("F_CONSTANT: %s\n", yytext); }
+{D}+"."{E}?{FS}?             { printf("F_CONSTANT: %s\n", yytext); }
+{HP}{H}+{P}{FS}?             { printf("F_CONSTANT: %s\n", yytext); }
+{HP}{H}*"."{H}+{P}{FS}?      { printf("F_CONSTANT: %s\n", yytext); }
+{HP}{H}+"."{P}{FS}?          { printf("F_CONSTANT: %s\n", yytext); }
 
 ({SP}?\"([^"\\\n]|{ES})*\"{WS}*)+ { printf("STRING_LITERAL\n"); }
 
-"++" { printf("INC_OP\n"); }
-"--" { printf("DEC_OP\n"); }
-"->" { printf("PTR_OP\n"); }
-"&&" { printf("AND_OP\n"); }
-"||" { printf("OR_OP\n"); }
-"<=" { printf("LE_OP\n"); }
-">=" { printf("GE_OP\n"); }
-"==" { printf("EQ_OP\n"); }
-"!=" { printf("NE_OP\n"); }
-"<=>" { printf("TH_OP\n"); }
-
-";" { printf(";\n"); }
-"{" { printf("{\n"); }
-"}" { printf("}\n"); }
-"(" { printf("(\n"); }
-")" { printf(")\n"); }
-"[" { printf("[\n"); }
-"]" { printf("]\n"); }
-"," { printf(",\n"); }
-"=" { printf("=\n"); }
-"+" { printf("+\n"); }
-"-" { printf("-\n"); }
-"*" { printf("*\n"); }
-"/" { printf("/\n"); }
+"<=>"      { printf("TH_OP\n"); }
+"?."  { printf("SAFE_DOT\n"); }
+"=>"  { printf("LAMBDA_ARROW\n"); }
+"**"  { printf("POW_OP\n"); }
+"++"       { printf("INC_OP\n"); }
+"--"       { printf("DEC_OP\n"); }
+"->"       { printf("PTR_OP\n"); }
+"&&"       { printf("AND_OP\n"); }
+"||"       { printf("OR_OP\n"); }
+"<="       { printf("LE_OP\n"); }
+">="       { printf("GE_OP\n"); }
+"=="       { printf("EQ_OP\n"); }
+"!="       { printf("NE_OP\n"); }
+";"        { printf(";\n"); }
+("{"|"<%") { printf("{\n"); }
+("}"|"%>") { printf("}\n"); }
+","        { printf(",\n"); }
+":"        { printf(":\n"); }
+"="        { printf("=\n"); }
+"("        { printf("(\n"); }
+")"        { printf(")\n"); }
+("["|"<:") { printf("[\n"); }
+("]"|":>") { printf("]\n"); }
+"."        { printf(".\n"); }
+"&"        { printf("&\n"); }
+"!"        { printf("!\n"); }
+"~"        { printf("~\n"); }
+"-"        { printf("-\n"); }
+"+"        { printf("+\n"); }
+"*"        { printf("*\n"); }
+"/"        { printf("/\n"); }
+"%"        { printf("%%\n"); }   
+"<"        { printf("<\n"); }
+">"        { printf(">\n"); }
+"^"        { printf("^\n"); }
+"|"        { printf("|\n"); }
+"?"        { printf("?\n"); }
 
 {WS}+   { /* ignore */ }
 .       { printf("UNKNOWN: %s\n", yytext); }
@@ -135,4 +158,3 @@ int main(int argc, char **argv)
     printf("Cyrix Lexer Finished.\n");
     return 0;
 }
-
