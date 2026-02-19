@@ -1,0 +1,7 @@
+Cyrix Lexer Started...
+INT
+IDENTIFIER: x
+=
+I_CONSTANT: 5
+;
+***lexing terminated*** [lexer error]: ill-formed comment

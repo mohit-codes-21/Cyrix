@@ -10,7 +10,7 @@ $(TARGET): cyrix.l
 
 # Run test files: make test1, make test2, etc.
 test%: $(TARGET)
-	./$(TARGET) test$*.txt > out$*.txt
+	./$(TARGET) tests/test$*.txt > outputs/out$*.txt
 
 clean:
 	rm -f lex.yy.c $(TARGET) 

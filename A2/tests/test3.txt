@@ -1,0 +1,129 @@
+// =========================================================
+// COMPREHENSIVE CYRIX LEXER TEST
+// =========================================================
+
+// ---------------------------------------------------------
+// SECTION 1: ALL KEYWORDS
+// ---------------------------------------------------------
+break case char continue default do double else extern float
+for if int long return short sizeof struct switch void while
+var foreach in match const
+
+// ---------------------------------------------------------
+// SECTION 2: IDENTIFIERS
+// ---------------------------------------------------------
+x
+_x
+__x
+_
+__
+abc123
+_abc_123_
+aVeryLongIdentifierNameThatGoesOnAndOnForAWhile
+A B C a b c
+_ __ ___ _a _1 a_ a_b_c
+breakpoint  // starts with keyword "break" but is longer
+integer     // starts with keyword "int" but is longer
+fortune     // starts with keyword "for" but is longer
+doing       // starts with keyword "do" but is longer
+whileLoop   // starts with keyword "while" but is longer
+ifTrue      // starts with keyword "if" but is longer
+matching    // starts with keyword "match" but is longer
+constantly  // starts with keyword "const" but is longer
+foreach_item // starts with keyword "foreach" but longer
+invariant   // starts with keyword "in" but longer
+switchCase  // starts with keyword "switch" but longer
+voidptr     // starts with keyword "void" but longer
+returning   // starts with keyword "return" but longer
+
+// ---------------------------------------------------------
+// SECTION 3: INTEGER CONSTANTS
+// ---------------------------------------------------------
+
+// Decimal
+0
+1
+9
+42
+100
+999999
+
+// Decimal with suffixes
+10u
+10U
+10l
+10L
+10ul
+10UL
+10uL
+10Ul
+10lu
+10LU
+10lU
+10Lu
+10ll
+10LL
+10ull
+10ULL
+10uLL
+10Ull
+10llu
+10LLU
+10llU
+10LLu
+
+// Octal
+00
+01
+07
+012
+0777
+
+// Octal with suffix
+012u
+012L
+012ULL
+
+// Hexadecimal
+0x0
+0X0
+0xFF
+0XFF
+0xDeAdBeEf
+0x1a2b3c
+
+// Hex with suffixes
+0xFFu
+0xFFUL
+0xFFull
+0xFFULL
+
+// Character constants
+'a'
+'z'
+'A'
+'Z'
+'0'
+'9'
+' '
+'\n'
+'\t'
+'\r'
+'\0'
+'\\'
+'\''
+'\"'
+'\a'
+'\b'
+'\f'
+'\v'
+'\?'
+'\x41'
+'\x7F'
+'\077'
+'\7'
+
+// Prefixed char constants
+L'a'
+u'a'
+U'a'

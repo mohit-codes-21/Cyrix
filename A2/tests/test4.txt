@@ -1,0 +1,130 @@
+// =========================================================
+// COMPREHENSIVE CYRIX LEXER TEST
+// =========================================================
+
+// ---------------------------------------------------------
+// SECTION 4: FLOATING-POINT CONSTANTS
+// ---------------------------------------------------------
+
+// Basic decimal floats
+3.14
+0.5
+.5
+5.
+0.0
+100.001
+
+// With exponent
+1e5
+1E5
+1e+5
+1e-5
+1E+10
+1E-10
+123e4
+123E4
+
+// With both decimal and exponent
+3.14e2
+.5e10
+5.e-3
+0.0E0
+
+// With float suffix
+3.14f
+3.14F
+3.14l
+3.14L
+1e5f
+1e5L
+.5f
+5.F
+
+// Hexadecimal floats
+0x1.0p10
+0x1.0P10
+0x1.0p+10
+0x1.0p-10
+0xA.Bp3
+0xA.Bp+3
+0xA.Bp-3
+0x1p0
+0x1P0
+0x0.1p4
+0x1.p4
+
+// Hex float with suffix
+0x1.0p10f
+0x1.0p10L
+
+// ---------------------------------------------------------
+// SECTION 5: STRING LITERALS
+// ---------------------------------------------------------
+
+"hello"
+"world"
+""
+"a"
+"hello world"
+"tab\there"
+"newline\nhere"
+"escape\\slash"
+"quote\"inside"
+"null\0byte"
+"octal\077test"
+"hex\x41test"
+"multi\nline\tstring\twith\tescapes"
+
+// Prefixed strings
+L"wide string"
+u"utf16 string"
+U"utf32 string"
+u8"utf8 string"
+
+// Adjacent string concatenation
+"hello" "world"
+"a" "b" "c"
+L"wide" "mix"
+
+// ---------------------------------------------------------
+// SECTION 6: ALL OPERATORS AND PUNCTUATION
+// ---------------------------------------------------------
+
+// Custom Cyrix operators
+<=>
+?.
+=>
+**
+
+// Standard C operators - increment/decrement
+++
+--
+
+// Pointer
+->
+
+// Logical
+&&
+||
+
+// Comparison
+<=
+>=
+==
+!=
+
+// Punctuation
+;
+{ }
+, : = ( ) [ ] .
+
+// Bitwise/Arithmetic
+& ! ~ - + * / % < > ^ | ?
+
+// ---------------------------------------------------------
+// SECTION 7: DIGRAPHS
+// ---------------------------------------------------------
+<%
+%>
+<:
+:>

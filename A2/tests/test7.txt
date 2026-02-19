@@ -1,0 +1,74 @@
+// =========================================================
+// COMPREHENSIVE CYRIX LEXER TEST
+// =========================================================
+
+// ---------------------------------------------------------
+// SECTION 13: NUMBER EDGE CASES  
+// ---------------------------------------------------------
+
+// Zero variants
+0
+00
+000
+0x0
+0X0
+
+// Boundary-ish
+2147483647
+4294967295u
+9999999999LL
+
+// Leading zeros in octal
+01234567
+
+// Hex edge
+0xffffffff
+0xFFFFFFFF
+0x0000001
+
+// Float edge cases
+.0
+0.
+.1e1
+0.e0
+1.e+0
+1.e-0
+
+// ---------------------------------------------------------
+// SECTION 14: SAFE_DOT VS DOT CHAINS
+// ---------------------------------------------------------
+
+a.b
+a?.b
+a.b.c
+a?.b.c
+a?.b?.c
+a.b?.c
+
+// ---------------------------------------------------------
+// SECTION 15: THREE-WAY COMPARISON EDGE CASES
+// ---------------------------------------------------------
+
+// <=> is three-way comparison
+a <=> b
+
+// <= then > should not happen because <=> takes priority
+// but <= by itself is fine  
+a <= b
+a < b
+
+// ---------------------------------------------------------
+// SECTION 16: MIXED KEYWORDS AND IDENTIFIERS
+// ---------------------------------------------------------
+
+int int_var;
+float float_val;
+char char_ptr;
+void void_func();
+var var_name;
+const const_val;
+return return_val;
+
+// =========================================================
+// END OF COMPREHENSIVE TEST
+// =========================================================

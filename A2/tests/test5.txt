@@ -1,0 +1,125 @@
+// =========================================================
+// COMPREHENSIVE CYRIX LEXER TEST
+// =========================================================
+
+// ---------------------------------------------------------
+// SECTION 8: OPERATOR AMBIGUITY / MAXIMAL MUNCH
+// ---------------------------------------------------------
+
+// <=> should be TH_OP, not <= then >
+a<=>b
+
+// ** should be POW_OP, not * then *
+a**b
+
+// => should be LAMBDA_ARROW, not = then >
+a=>b
+
+// ?. should be SAFE_DOT, not ? then .
+a?.b
+
+// *** should be POW_OP then *
+a***b
+
+// ++ should be INC_OP, not + then +
+a++
+
+// -- should be DEC_OP, not - then -
+a--
+
+// -> should be PTR_OP, not - then >
+a->b
+
+// && should be AND_OP, not & then &
+a&&b
+
+// || should be OR_OP, not | then |
+a||b
+
+// <= should be LE_OP, not < then =
+a<=b
+
+// >= should be GE_OP, not > then =
+a>=b
+
+// == should be EQ_OP, not = then =
+a==b
+
+// != should be NE_OP, not ! then =
+a!=b
+
+// = followed by > (with space) is NOT lambda arrow
+a = > b
+
+// ? followed by . (with space) should be ? then .
+a ? . b
+
+// Stacking multiple ambiguous operators
+a<=>b**c=>d?.e
+
+// <=>> should be <=> then >
+a<=>>b
+
+// **= is POW_OP then =
+a**=b
+
+// ?.. is SAFE_DOT then .
+a?..b
+
+// ---------------------------------------------------------
+// SECTION 9: COMMENTS
+// ---------------------------------------------------------
+
+// Single line comment
+x = 1; // inline comment
+
+/* Simple block comment */
+
+/* 
+   Multi-line
+   block comment
+*/
+
+/* Comment with * inside */
+
+/* Comment with ** inside */
+
+/* Comment with / inside */
+
+/* Comment with *
+   on new line */
+
+// Comment with /* block start inside single line
+
+/* nested-looking /* comment */ 
+
+// ---------------------------------------------------------
+// SECTION 10: WHITESPACE AND FORMATTING
+// ---------------------------------------------------------
+
+// Tokens jammed together with no space
+a+b*c-d/e%f
+a&&b||c
+x=1;y=2;z=3;
+
+// Lots of whitespace
+   x    =    1    ;
+
+// Tabs
+	x	=	1	;
+
+// Multiple newlines
+
+
+x = 1;
+
+
+
+// ---------------------------------------------------------
+// SECTION 11: UNKNOWN / ILLEGAL CHARACTERS
+// ---------------------------------------------------------
+@
+#
+$
+`
+\

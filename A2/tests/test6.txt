@@ -1,0 +1,102 @@
+// =========================================================
+// COMPREHENSIVE CYRIX LEXER TEST
+// =========================================================
+
+// ---------------------------------------------------------
+// SECTION 12: COMPLEX EXPRESSIONS
+// ---------------------------------------------------------
+
+// Nested parentheses
+((((x))))
+
+// Chained operations
+a + b - c * d / e % f
+
+// Pointer chain
+p->q->r->s
+
+// Array access
+arr[0][1][2]
+
+// Type cast-like
+(int)x
+(float)y
+(char)z
+
+// Ternary operator
+a ? b : c
+
+// Complex expression
+result = (a ** 2) + (b ** 3) - (c * d) / (e + f);
+
+// Foreach with all parts
+foreach (item in collection) {
+    result = item ** 2;
+    if (result > MAX) {
+        break;
+    }
+}
+
+// Match expression
+match(x) {
+    case 1:
+        y = 10;
+        break;
+    case 2:
+        y = 20;
+        break;
+    default:
+        y = 0;
+}
+
+// Lambda usage
+fn = (a, b) => a + b;
+g = (x) => {
+    var temp = x ** 2;
+    return temp;
+};
+
+// Const declarations
+const int SIZE = 100;
+const char *msg = "hello";
+const double PI = 3.14159265358979;
+
+// Struct usage
+struct Point {
+    int x;
+    int y;
+};
+
+// Sizeof
+sizeof(int)
+sizeof(x)
+sizeof(struct Point)
+
+// Do-while
+do {
+    x++;
+} while (x < 10);
+
+// Switch-case
+switch (val) {
+    case 0:
+        break;
+    case 1:
+        break;
+    default:
+        break;
+}
+
+// For loop
+for (int i = 0; i < 10; i++) {
+    arr[i] = i * 2;
+}
+
+// While loop
+while (x > 0) {
+    x--;
+}
+
+// Extern declaration
+extern int globalVar;
+extern void externalFunc();
