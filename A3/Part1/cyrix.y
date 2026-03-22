@@ -27,12 +27,25 @@ extern char *yytext;
 
 %%
 
+lambda_params
+	: IDENTIFIER
+	| lambda_params ',' IDENTIFIER
+	;
+
+lambda_expression
+	: '(' ')' LAMBDA_ARROW expression
+	| '(' ')' LAMBDA_ARROW compound_statement
+	| '(' lambda_params ')' LAMBDA_ARROW expression
+	| '(' lambda_params ')' LAMBDA_ARROW compound_statement
+	;
+
 primary_expression
 	: IDENTIFIER
 	| constant
 	| string
 	| '(' expression ')'
 	| generic_selection
+    | lambda_expression
 	;
 
 constant
@@ -71,6 +84,7 @@ postfix_expression
 	| postfix_expression '(' argument_expression_list ')'
 	| postfix_expression '.' IDENTIFIER
 	| postfix_expression PTR_OP IDENTIFIER
+    | postfix_expression SAFE_DOT IDENTIFIER 
 	| postfix_expression INC_OP
 	| postfix_expression DEC_OP
 	| '(' type_name ')' '{' initializer_list '}'
@@ -106,11 +120,16 @@ cast_expression
 	| '(' type_name ')' cast_expression
 	;
 
-multiplicative_expression
+power_expression
 	: cast_expression
-	| multiplicative_expression '*' cast_expression
-	| multiplicative_expression '/' cast_expression
-	| multiplicative_expression '%' cast_expression
+	| cast_expression POW_OP power_expression
+	;
+
+multiplicative_expression
+	: power_expression
+	| multiplicative_expression '*' power_expression
+	| multiplicative_expression '/' power_expression
+	| multiplicative_expression '%' power_expression
 	;
 
 additive_expression
@@ -169,6 +188,20 @@ conditional_expression
 	: logical_or_expression
 	;
 
+lhs_list
+	: IDENTIFIER
+	| lhs_list ',' IDENTIFIER
+	;
+
+rhs_list
+	: assignment_expression
+	| rhs_list ',' assignment_expression
+	;
+
+multi_assignment
+	: lhs_list '=' rhs_list
+	;
+
 assignment_expression
 	: conditional_expression
 	| unary_expression assignment_operator assignment_expression
@@ -197,10 +230,24 @@ constant_expression
 	: conditional_expression	/* with constraints */
 	;
 
+var_init_list
+	: var_init
+	| var_init_list ',' var_init
+	;
+
+var_init
+	: IDENTIFIER '=' assignment_expression
+	;
+
+var_declaration
+	: VAR var_init_list ';'
+	;
+
 declaration
 	: declaration_specifiers ';'
 	| declaration_specifiers init_declarator_list ';'
 	| static_assert_declaration
+    | var_declaration
 	;
 
 declaration_specifiers
@@ -374,14 +421,29 @@ parameter_type_list
 	;
 
 parameter_list
-	: parameter_declaration
-	| parameter_list ',' parameter_declaration
+	: normal_param_list
+	| normal_param_list ',' default_param_list
+	| default_param_list
 	;
 
-parameter_declaration
+normal_param_list
+	: normal_param
+	| normal_param_list ',' normal_param
+	;
+
+default_param_list
+	: default_param
+	| default_param_list ',' default_param
+	;
+
+normal_param
 	: declaration_specifiers declarator
 	| declaration_specifiers abstract_declarator
 	| declaration_specifiers
+	;
+
+default_param
+	: declaration_specifiers declarator '=' assignment_expression
 	;
 
 identifier_list
@@ -488,12 +550,37 @@ block_item
 expression_statement
 	: ';'
 	| expression ';'
+    | multi_assignment ';'
+	;
+
+match_statement
+	: MATCH '(' expression ')' '{' case_list default_opt '}'
+	;
+
+case_list
+	: case_list match_case
+	| match_case
+	;
+
+match_case
+	: CASE constant_expression ':' statement
+	;
+
+default_opt
+	: /* empty */
+	| DEFAULT ':' statement
 	;
 
 selection_statement
 	: IF '(' expression ')' statement ELSE statement 
 	| IF '(' expression ')' statement 
 	| SWITCH '(' expression ')' statement
+    | match_statement
+	;
+
+foreach_var
+	: IDENTIFIER
+	| type_specifier IDENTIFIER
 	;
 
 iteration_statement
@@ -503,6 +590,7 @@ iteration_statement
 	| FOR '(' expression_statement expression_statement expression ')' statement
 	| FOR '(' declaration expression_statement ')' statement
 	| FOR '(' declaration expression_statement expression ')' statement
+    | FOREACH '(' foreach_var IN expression ')' statement
 	;
 
 jump_statement
