@@ -120,7 +120,11 @@ static int check_type(void);
 "|"                                     { return '|'; }
 "?"                                     { return '?'; }
 
-{WS}+                                   { /* whitespace separates tokens */ }
+{WS}+ {
+    for(int i = 0; i < yyleng; i++)
+        if(yytext[i] == '\n')
+            yylineno++;
+}
 .                                       { /* discard bad characters */ }
 
 %%

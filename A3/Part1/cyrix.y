@@ -4,6 +4,7 @@
 #include <string.h>
 
 extern char *yytext;
+extern int yylineno;
 
 char buff[2048];
 int mode = -1;
@@ -14,6 +15,7 @@ void yyerror(const char *s);
 char *derivations[20000];
 int derivation_count = 0;
 %}
+%define parse.error verbose
 
 %token	IDENTIFIER I_CONSTANT F_CONSTANT STRING_LITERAL FUNC_NAME SIZEOF
 %token	PTR_OP INC_OP DEC_OP LEFT_OP RIGHT_OP LE_OP GE_OP EQ_OP NE_OP TH_OP
@@ -646,10 +648,12 @@ void yyerror(const char *s)
 {
     fflush(stdout);
 
-    if (mode == -1)
-        printf("***parsing terminated*** [syntax error]\n");
-    else if (mode == 0 || mode == 1)
-        printf("%s\n", s);
+    fprintf(stderr,
+        "*** parsing error at line %d near '%s' ***\n",
+        yylineno,
+        (yytext && yytext[0]) ? yytext : "EOF");
+
+    fprintf(stderr, "%s\n", s);
 
     exit(-1);
 }
