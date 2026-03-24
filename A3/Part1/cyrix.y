@@ -5,6 +5,8 @@
 
 extern char *yytext;
 extern int yylineno;
+extern int token_count, max_depth;
+extern int id_count, keyword_count, constant_count, string_count, operator_count;
 
 char buff[2048];
 int mode = -1;
@@ -689,6 +691,22 @@ int main(int argc, char **argv)
     }
 
     printf("***parsing successful***\n");
+	printf("\n=== Reverse Derivation (Top-Down) ===\n");
 	print_reverse_derivation();
+
+	printf("\n=== Additional Information ===\n");
+
+	printf("\nStatistics:\n");
+	printf("  Lines processed        : %d\n", yylineno);
+	printf("  Tokens processed       : %d\n", token_count);
+	printf("  Derivation steps       : %d\n", derivation_count);
+	printf("  Maximum nesting depth  : %d\n", max_depth);
+
+	printf("\nToken Breakdown:\n");
+	printf("  Identifiers            : %d\n", id_count);
+	printf("  Keywords               : %d\n", keyword_count);
+	printf("  Constants              : %d\n", constant_count);
+	printf("  Strings                : %d\n", string_count);
+	printf("  Operators/Symbols      : %d\n", operator_count);
     return 0;
 }
