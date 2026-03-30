@@ -25,18 +25,38 @@ int derivation_count = 0;
 %token	SUB_ASSIGN LEFT_ASSIGN RIGHT_ASSIGN AND_ASSIGN
 %token	XOR_ASSIGN OR_ASSIGN
 %token	TYPEDEF_NAME ENUMERATION_CONSTANT
-%token  VAR FOREACH IN MATCH
+%token  VAR FOREACH IN MATCH FN
 %token  SAFE_DOT LAMBDA_ARROW POW_OP
 
 %token	TYPEDEF EXTERN STATIC AUTO REGISTER INLINE
 %token	CONST RESTRICT VOLATILE
 %token	BOOL CHAR SHORT INT LONG SIGNED UNSIGNED FLOAT DOUBLE VOID
-%token	COMPLEX IMAGINARY 
+%token	COMPLEX IMAGINARY
 %token	STRUCT UNION ENUM ELLIPSIS
 
-%token	CASE DEFAULT IF ELSE SWITCH WHILE DO FOR GOTO CONTINUE BREAK RETURN
+%token	CASE DEFAULT IF SWITCH WHILE DO FOR GOTO CONTINUE BREAK RETURN
 
 %token	ALIGNAS ALIGNOF ATOMIC GENERIC NORETURN STATIC_ASSERT THREAD_LOCAL
+
+/* Precedence declarations: lowest to highest */
+%nonassoc LOWER_THAN_ELSE
+%nonassoc ELSE
+
+%right '=' MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN ADD_ASSIGN SUB_ASSIGN LEFT_ASSIGN RIGHT_ASSIGN AND_ASSIGN XOR_ASSIGN OR_ASSIGN
+%left OR_OP
+%left AND_OP
+%left '|'
+%left '^'
+%left '&'
+%left EQ_OP NE_OP
+%left '<' '>' LE_OP GE_OP TH_OP
+%left LEFT_OP RIGHT_OP
+%left '+' '-'
+%left '*' '/' '%'
+%right POW_OP
+%right UNARY
+%left INC_OP DEC_OP '[' '.' PTR_OP SAFE_DOT
+%nonassoc '(' FN
 
 %start translation_unit
 
@@ -48,10 +68,10 @@ lambda_params
 	;
 
 lambda_expression
-	: '(' ')' LAMBDA_ARROW expression { derivations[derivation_count++] = "lambda_expression -> ( ) LAMBDA_ARROW expression"; }
-	| '(' ')' LAMBDA_ARROW compound_statement { derivations[derivation_count++] = "lambda_expression -> ( ) LAMBDA_ARROW compound_statement"; }
-	| '(' lambda_params ')' LAMBDA_ARROW expression { derivations[derivation_count++] = "lambda_expression -> ( lambda_params ) LAMBDA_ARROW expression"; }
-	| '(' lambda_params ')' LAMBDA_ARROW compound_statement { derivations[derivation_count++] = "lambda_expression -> ( lambda_params ) LAMBDA_ARROW compound_statement"; }
+	: FN '(' ')' LAMBDA_ARROW assignment_expression { derivations[derivation_count++] = "lambda_expression -> FN ( ) LAMBDA_ARROW assignment_expression"; }
+	| FN '(' ')' LAMBDA_ARROW compound_statement { derivations[derivation_count++] = "lambda_expression -> FN ( ) LAMBDA_ARROW compound_statement"; }
+	| FN '(' lambda_params ')' LAMBDA_ARROW assignment_expression { derivations[derivation_count++] = "lambda_expression -> FN ( lambda_params ) LAMBDA_ARROW assignment_expression"; }
+	| FN '(' lambda_params ')' LAMBDA_ARROW compound_statement { derivations[derivation_count++] = "lambda_expression -> FN ( lambda_params ) LAMBDA_ARROW compound_statement"; }
 	;
 
 primary_expression
@@ -112,10 +132,10 @@ argument_expression_list
 	;
 
 unary_expression
-	: postfix_expression { derivations[derivation_count++] = "unary_expression -> postfix_expression"; }
+	: postfix_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "unary_expression -> postfix_expression"; }
 	| INC_OP unary_expression { derivations[derivation_count++] = "unary_expression -> INC_OP unary_expression"; }
 	| DEC_OP unary_expression { derivations[derivation_count++] = "unary_expression -> DEC_OP unary_expression"; }
-	| unary_operator cast_expression { derivations[derivation_count++] = "unary_expression -> unary_operator cast_expression"; }
+	| unary_operator cast_expression %prec UNARY { derivations[derivation_count++] = "unary_expression -> unary_operator cast_expression"; }
 	| SIZEOF unary_expression { derivations[derivation_count++] = "unary_expression -> SIZEOF unary_expression"; }
 	| SIZEOF '(' type_name ')' { derivations[derivation_count++] = "unary_expression -> SIZEOF ( type_name )"; }
 	| ALIGNOF '(' type_name ')' { derivations[derivation_count++] = "unary_expression -> ALIGNOF ( type_name )"; }
@@ -131,36 +151,36 @@ unary_operator
 	;
 
 cast_expression
-	: unary_expression { derivations[derivation_count++] = "cast_expression -> unary_expression"; }
+	: unary_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "cast_expression -> unary_expression"; }
 	| '(' type_name ')' cast_expression { derivations[derivation_count++] = "cast_expression -> ( type_name ) cast_expression"; }
 	;
 
 power_expression
-	: cast_expression { derivations[derivation_count++] = "power_expression -> cast_expression"; }
+	: cast_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "power_expression -> cast_expression"; }
 	| cast_expression POW_OP power_expression { derivations[derivation_count++] = "power_expression -> cast_expression POW_OP power_expression"; }
 	;
 
 multiplicative_expression
-	: power_expression { derivations[derivation_count++] = "multiplicative_expression -> power_expression"; }
+	: power_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "multiplicative_expression -> power_expression"; }
 	| multiplicative_expression '*' power_expression { derivations[derivation_count++] = "multiplicative_expression -> multiplicative_expression * power_expression"; }
 	| multiplicative_expression '/' power_expression { derivations[derivation_count++] = "multiplicative_expression -> multiplicative_expression / power_expression"; }
 	| multiplicative_expression '%' power_expression { derivations[derivation_count++] = "multiplicative_expression -> multiplicative_expression % power_expression"; }
 	;
 
 additive_expression
-	: multiplicative_expression { derivations[derivation_count++] = "additive_expression -> multiplicative_expression"; }
+	: multiplicative_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "additive_expression -> multiplicative_expression"; }
 	| additive_expression '+' multiplicative_expression { derivations[derivation_count++] = "additive_expression -> additive_expression + multiplicative_expression"; }
 	| additive_expression '-' multiplicative_expression { derivations[derivation_count++] = "additive_expression -> additive_expression - multiplicative_expression"; }
 	;
 
 shift_expression
-	: additive_expression { derivations[derivation_count++] = "shift_expression -> additive_expression"; }
+	: additive_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "shift_expression -> additive_expression"; }
 	| shift_expression LEFT_OP additive_expression { derivations[derivation_count++] = "shift_expression -> shift_expression LEFT_OP additive_expression"; }
 	| shift_expression RIGHT_OP additive_expression { derivations[derivation_count++] = "shift_expression -> shift_expression RIGHT_OP additive_expression"; }
 	;
 
 relational_expression
-	: shift_expression { derivations[derivation_count++] = "relational_expression -> shift_expression"; }
+	: shift_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "relational_expression -> shift_expression"; }
 	| relational_expression '<' shift_expression { derivations[derivation_count++] = "relational_expression -> relational_expression < shift_expression"; }
 	| relational_expression '>' shift_expression { derivations[derivation_count++] = "relational_expression -> relational_expression > shift_expression"; }
 	| relational_expression LE_OP shift_expression { derivations[derivation_count++] = "relational_expression -> relational_expression LE_OP shift_expression"; }
@@ -169,52 +189,38 @@ relational_expression
 	;
 
 equality_expression
-	: relational_expression { derivations[derivation_count++] = "equality_expression -> relational_expression"; }
+	: relational_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "equality_expression -> relational_expression"; }
 	| equality_expression EQ_OP relational_expression { derivations[derivation_count++] = "equality_expression -> equality_expression EQ_OP relational_expression"; }
 	| equality_expression NE_OP relational_expression { derivations[derivation_count++] = "equality_expression -> equality_expression NE_OP relational_expression"; }
 	;
 
 and_expression
-	: equality_expression { derivations[derivation_count++] = "and_expression -> equality_expression"; }
+	: equality_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "and_expression -> equality_expression"; }
 	| and_expression '&' equality_expression { derivations[derivation_count++] = "and_expression -> and_expression & equality_expression"; }
 	;
 
 exclusive_or_expression
-	: and_expression { derivations[derivation_count++] = "exclusive_or_expression -> and_expression"; }
+	: and_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "exclusive_or_expression -> and_expression"; }
 	| exclusive_or_expression '^' and_expression { derivations[derivation_count++] = "exclusive_or_expression -> exclusive_or_expression ^ and_expression"; }
 	;
 
 inclusive_or_expression
-	: exclusive_or_expression { derivations[derivation_count++] = "inclusive_or_expression -> exclusive_or_expression"; }
+	: exclusive_or_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "inclusive_or_expression -> exclusive_or_expression"; }
 	| inclusive_or_expression '|' exclusive_or_expression { derivations[derivation_count++] = "inclusive_or_expression -> inclusive_or_expression | exclusive_or_expression"; }
 	;
 
 logical_and_expression
-	: inclusive_or_expression { derivations[derivation_count++] = "logical_and_expression -> inclusive_or_expression"; }
+	: inclusive_or_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "logical_and_expression -> inclusive_or_expression"; }
 	| logical_and_expression AND_OP inclusive_or_expression { derivations[derivation_count++] = "logical_and_expression -> logical_and_expression AND_OP inclusive_or_expression"; }
 	;
 
 logical_or_expression
-	: logical_and_expression { derivations[derivation_count++] = "logical_or_expression -> logical_and_expression"; }
+	: logical_and_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "logical_or_expression -> logical_and_expression"; }
 	| logical_or_expression OR_OP logical_and_expression { derivations[derivation_count++] = "logical_or_expression -> logical_or_expression OR_OP logical_and_expression"; }
 	;
 
 conditional_expression
-	: logical_or_expression { derivations[derivation_count++] = "conditional_expression -> logical_or_expression"; }
-	;
-
-lhs_list
-	: IDENTIFIER { derivations[derivation_count++] = "lhs_list -> IDENTIFIER"; }
-	| lhs_list ',' IDENTIFIER { derivations[derivation_count++] = "lhs_list -> lhs_list , IDENTIFIER"; }
-	;
-
-rhs_list
-	: assignment_expression { derivations[derivation_count++] = "rhs_list -> assignment_expression"; }
-	| rhs_list ',' assignment_expression { derivations[derivation_count++] = "rhs_list -> rhs_list , assignment_expression"; }
-	;
-
-multi_assignment
-	: lhs_list '=' rhs_list { derivations[derivation_count++] = "multi_assignment -> lhs_list = rhs_list"; }
+	: logical_or_expression %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "conditional_expression -> logical_or_expression"; }
 	;
 
 assignment_expression
@@ -382,7 +388,6 @@ type_qualifier
 	: CONST { derivations[derivation_count++] = "type_qualifier -> CONST"; }
 	| RESTRICT { derivations[derivation_count++] = "type_qualifier -> RESTRICT"; }
 	| VOLATILE { derivations[derivation_count++] = "type_qualifier -> VOLATILE"; }
-	| ATOMIC { derivations[derivation_count++] = "type_qualifier -> ATOMIC"; }
 	;
 
 function_specifier
@@ -436,29 +441,15 @@ parameter_type_list
 	;
 
 parameter_list
-	: normal_param_list { derivations[derivation_count++] = "parameter_list -> normal_param_list"; }
-	| normal_param_list ',' default_param_list { derivations[derivation_count++] = "parameter_list -> normal_param_list , default_param_list"; }
-	| default_param_list { derivations[derivation_count++] = "parameter_list -> default_param_list"; }
+	: param_declaration { derivations[derivation_count++] = "parameter_list -> param_declaration"; }
+	| parameter_list ',' param_declaration { derivations[derivation_count++] = "parameter_list -> parameter_list , param_declaration"; }
 	;
 
-normal_param_list
-	: normal_param { derivations[derivation_count++] = "normal_param_list -> normal_param"; }
-	| normal_param_list ',' normal_param { derivations[derivation_count++] = "normal_param_list -> normal_param_list , normal_param"; }
-	;
-
-default_param_list
-	: default_param { derivations[derivation_count++] = "default_param_list -> default_param"; }
-	| default_param_list ',' default_param { derivations[derivation_count++] = "default_param_list -> default_param_list , default_param"; }
-	;
-
-normal_param
-	: declaration_specifiers declarator { derivations[derivation_count++] = "normal_param -> declaration_specifiers declarator"; }
-	| declaration_specifiers abstract_declarator { derivations[derivation_count++] = "normal_param -> declaration_specifiers abstract_declarator"; }
-	| declaration_specifiers { derivations[derivation_count++] = "normal_param -> declaration_specifiers"; }
-	;
-
-default_param
-	: declaration_specifiers declarator '=' assignment_expression { derivations[derivation_count++] = "default_param -> declaration_specifiers declarator = assignment_expression"; }
+param_declaration
+	: declaration_specifiers declarator { derivations[derivation_count++] = "param_declaration -> declaration_specifiers declarator"; }
+	| declaration_specifiers abstract_declarator { derivations[derivation_count++] = "param_declaration -> declaration_specifiers abstract_declarator"; }
+	| declaration_specifiers { derivations[derivation_count++] = "param_declaration -> declaration_specifiers"; }
+	| declaration_specifiers declarator '=' assignment_expression { derivations[derivation_count++] = "param_declaration -> declaration_specifiers declarator = assignment_expression"; }
 	;
 
 identifier_list
@@ -565,7 +556,6 @@ block_item
 expression_statement
 	: ';' { derivations[derivation_count++] = "expression_statement -> ;"; }
 	| expression ';' { derivations[derivation_count++] = "expression_statement -> expression ;"; }
-    | multi_assignment ';' { derivations[derivation_count++] = "expression_statement -> multi_assignment ;"; }
 	;
 
 match_statement
@@ -588,7 +578,7 @@ default_opt
 
 selection_statement
 	: IF '(' expression ')' statement ELSE statement { derivations[derivation_count++] = "selection_statement -> IF ( expression ) statement ELSE statement"; }
-	| IF '(' expression ')' statement { derivations[derivation_count++] = "selection_statement -> IF ( expression ) statement"; }
+	| IF '(' expression ')' statement %prec LOWER_THAN_ELSE { derivations[derivation_count++] = "selection_statement -> IF ( expression ) statement"; }
 	| SWITCH '(' expression ')' statement { derivations[derivation_count++] = "selection_statement -> SWITCH ( expression ) statement"; }
     | match_statement { derivations[derivation_count++] = "selection_statement -> match_statement"; }
 	;

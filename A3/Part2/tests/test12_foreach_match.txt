@@ -1,0 +1,15 @@
+int main() {
+    int arr;
+    foreach (int x in arr) {
+        x = x + 1;
+    }
+
+    int val = 3;
+    match (val) {
+        case 1: val = 10;
+        case 2: val = 20;
+        default: val = 0;
+    }
+
+    return val;
+}

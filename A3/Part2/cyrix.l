@@ -73,6 +73,7 @@ static int check_type(void);
 "foreach"   { keyword_count++; token_count++; return FOREACH; }
 "in"        { keyword_count++; token_count++; return IN; }
 "match"     { keyword_count++; token_count++; return MATCH; }
+"fn"        { keyword_count++; token_count++; return FN; }
 "const"     { keyword_count++; token_count++; return CONST; }
 
 {L}{A}* { id_count++; token_count++; return check_type(); }

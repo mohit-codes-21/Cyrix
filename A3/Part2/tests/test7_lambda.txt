@@ -1,0 +1,5 @@
+int main() {
+    int x = fn(a, b) => a + b;
+    int y = fn() => 42;
+    return x;
+}
