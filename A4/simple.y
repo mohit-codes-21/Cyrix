@@ -10,11 +10,43 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 extern int   yylineno;
 extern char *yytext;
 int  yylex(void);
 void yyerror(const char *s);
+
+/* ═══════════════════════════════════════════════════════
+   ERROR BUFFER  —  Option A design
+   All semantic / lex / parse errors are collected here.
+   Nothing is printed to stderr during parsing.
+   At the end, main decides: errors? print only error
+   report. Clean? print full IR output.
+   ═══════════════════════════════════════════════════════ */
+#define MAX_ERRORS 512
+typedef struct { char msg[256]; } ErrEntry;
+static ErrEntry ERR[MAX_ERRORS];
+static int      err_cnt = 0;
+static int      suppress_ir = 0;  /* set to 1 on first error */
+
+void add_error(const char *fmt, ...)
+{
+    if (err_cnt >= MAX_ERRORS) return;
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(ERR[err_cnt++].msg, 256, fmt, ap);
+    va_end(ap);
+    suppress_ir = 1;
+}
+
+static void print_errors(void)
+{
+    printf("\n=== ERRORS DETECTED (%d) =====================================\n", err_cnt);
+    for (int i = 0; i < err_cnt; i++)
+        printf("  %s\n", ERR[i].msg);
+    printf("======================================================================\n");
+}
 
 /* ═══════════════════════════════════════════════════════
    SOURCE LINE TABLE
@@ -86,9 +118,7 @@ static Sym *sym_decl(const char *nm, const char *ty)
         if (ST[i].active && ST[i].scope == dep &&
             strcmp(ST[i].name, nm) == 0)
         {
-            fprintf(stderr,
-                "\n[Semantic Error] Line %d: '%s' already declared in this "
-                "scope (first declared at line %d)\n",
+            add_error("[Semantic Error] Line %d: '%s' already declared in this scope (first declared at line %d)",
                 yylineno, nm, ST[i].decl);
             return NULL;
         }
@@ -127,6 +157,7 @@ static void sym_mk(const char *nm)
    ═══════════════════════════════════════════════════════ */
 static void show_quads(int from)
 {
+    if (suppress_ir) return;
     if (from >= qn) { printf("  (no IR quads generated)\n"); return; }
     printf("  +---------+---------------+---------------+---------------+---------------+\n");
     printf("  |   No    |      op       |     arg1      |     arg2      |    result     |\n");
@@ -139,6 +170,7 @@ static void show_quads(int from)
 
 static void show_sym(void)
 {
+    if (suppress_ir) return;
     printf("  +------------------+---------+-------+------------+--------------+---------+--------------+\n");
     printf("  |      Name        |  Type   | Scope | Decl Line  |  Live Until  |  Init?  |    Value     |\n");
     printf("  +------------------+---------+-------+------------+--------------+---------+--------------+\n");
@@ -162,6 +194,7 @@ static void show_sym(void)
 
 static void show_stmt(int line, int q0)
 {
+    if (suppress_ir) return;
     printf("\n");
     printf("  ================================================================\n");
     if (line >= 1 && line <= src_cnt)
@@ -368,8 +401,7 @@ expression_statement
     : ';'
     | expression ';'
         {
-            printf("\n  -- Symbol Table (after expression statement) --------\n");
-            show_sym();
+            if (!suppress_ir) { printf("\n  -- Symbol Table (after expression statement) --------\n"); show_sym(); }
             free($1);
         }
     ;
@@ -597,17 +629,13 @@ jump_statement
     : BREAK ';'
         {
             if (brk_top < 0)
-                fprintf(stderr,
-                    "\n[Semantic Error] Line %d: 'break' outside a loop\n",
-                    yylineno);
+                add_error("[Semantic Error] Line %d: 'break' outside a loop", yylineno);
             else { int idx = emit_q("goto","??","-","-"); brk_add(idx); }
         }
     | CONTINUE ';'
         {
             if (cnt_top < 0)
-                fprintf(stderr,
-                    "\n[Semantic Error] Line %d: 'continue' outside a loop\n",
-                    yylineno);
+                add_error("[Semantic Error] Line %d: 'continue' outside a loop", yylineno);
             else
                 emit_q("goto", cnt_lbl[cnt_top], "-", "-");
         }
@@ -641,9 +669,7 @@ assignment_expression
     | IDENTIFIER '=' assignment_expression
         {
             if (!sym_look($1))
-                fprintf(stderr,
-                    "\n[Semantic Error] Line %d: assignment to undeclared "
-                    "variable '%s'\n", yylineno, $1);
+                add_error("[Semantic Error] Line %d: assignment to undeclared variable '%s'", yylineno, $1);
             else { emit_q("=", $3, "-", $1); sym_sv($1, $3); }
             $$ = strdup($1); free($3);
         }
@@ -651,8 +677,7 @@ assignment_expression
     | IDENTIFIER ADD_ASSIGN assignment_expression
         {
             if (!sym_look($1))
-                fprintf(stderr,"\n[Semantic Error] Line %d: undeclared '%s'\n",
-                    yylineno,$1);
+                add_error("[Semantic Error] Line %d: assignment to undeclared variable '%s'", yylineno, $1);
             else {
                 char *t = nt();
                 emit_q("+", $1, $3, t); emit_q("=", t, "-", $1);
@@ -664,8 +689,7 @@ assignment_expression
     | IDENTIFIER SUB_ASSIGN assignment_expression
         {
             if (!sym_look($1))
-                fprintf(stderr,"\n[Semantic Error] Line %d: undeclared '%s'\n",
-                    yylineno,$1);
+                add_error("[Semantic Error] Line %d: assignment to undeclared variable '%s'", yylineno, $1);
             else {
                 char *t = nt();
                 emit_q("-", $1, $3, t); emit_q("=", t, "-", $1);
@@ -677,8 +701,7 @@ assignment_expression
     | IDENTIFIER MUL_ASSIGN assignment_expression
         {
             if (!sym_look($1))
-                fprintf(stderr,"\n[Semantic Error] Line %d: undeclared '%s'\n",
-                    yylineno,$1);
+                add_error("[Semantic Error] Line %d: assignment to undeclared variable '%s'", yylineno, $1);
             else {
                 char *t = nt();
                 emit_q("*", $1, $3, t); emit_q("=", t, "-", $1);
@@ -690,8 +713,7 @@ assignment_expression
     | IDENTIFIER DIV_ASSIGN assignment_expression
         {
             if (!sym_look($1))
-                fprintf(stderr,"\n[Semantic Error] Line %d: undeclared '%s'\n",
-                    yylineno,$1);
+                add_error("[Semantic Error] Line %d: assignment to undeclared variable '%s'", yylineno, $1);
             else {
                 char *t = nt();
                 emit_q("/", $1, $3, t); emit_q("=", t, "-", $1);
@@ -814,9 +836,7 @@ primary_expression
     : IDENTIFIER
         {
             if (!sym_look($1))
-                fprintf(stderr,
-                    "\n[Semantic Error] Line %d: use of undeclared "
-                    "variable '%s'\n", yylineno, $1);
+                add_error("[Semantic Error] Line %d: use of undeclared variable '%s'", yylineno, $1);
             $$ = $1;
         }
     | I_CONSTANT  { $$ = $1; }
@@ -831,10 +851,10 @@ primary_expression
    ═══════════════════════════════════════════════════════ */
 void yyerror(const char *s)
 {
-    fprintf(stderr, "\n[Parse Error] Line %d near '%s':\n  %s\n",
-            yylineno,
-            (yytext && yytext[0]) ? yytext : "<EOF>",
-            s);
+    add_error("[Parse Error]  Line %d near '%s': %s",
+              yylineno,
+              (yytext && yytext[0]) ? yytext : "<EOF>",
+              s);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -863,7 +883,6 @@ int main(int argc, char **argv)
     }
     fclose(fp);
 
-    /* Print banner and full source */
     printf("+======================================================================+\n");
     printf("|   Simple Language Compiler  --  Intermediate Code Generator          |\n");
     printf("|   CS327 Compilers  --  Lab Assignment #4                             |\n");
@@ -884,14 +903,16 @@ int main(int argc, char **argv)
     int ret = yyparse();
     fclose(yyin);
 
-    if (ret == 0)
+    /* ── Option A decision point ── */
+    if (err_cnt > 0 || ret != 0) {
+        print_errors();
+        printf("\n[FAIL] %d error(s) found. IR output suppressed.\n", err_cnt);
+    } else {
         printf("\n[OK] Parsing and IR generation completed successfully.\n");
-    else
-        printf("\n[FAIL] Errors were encountered during parsing.\n");
-
-    printf("\n=== FINAL COMPLETE QUADRUPLE TABLE (Three-Address Code / IR) =========\n");
-    print_summary();
+        printf("\n=== FINAL COMPLETE QUADRUPLE TABLE (Three-Address Code / IR) =========\n");
+        print_summary();
+    }
 
     for (int i = 0; i < src_cnt; i++) free(src_lines[i]);
-    return ret;
+    return (err_cnt > 0 || ret != 0) ? 1 : 0;
 }

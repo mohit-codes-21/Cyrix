@@ -27,6 +27,8 @@ WS  [ \t\v\f]
 /* NOTE: yylineno is declared by flex automatically when %option yylineno
    is used. We do NOT declare it here. */
 extern void yyerror(const char *s);
+extern void add_error(const char *fmt, ...);
+#include <stdarg.h>
 
 static void comment(void);
 %}
@@ -97,9 +99,7 @@ static void comment(void);
 \n          { /* yylineno auto-incremented by %option yylineno */ }
 {WS}+       { /* skip whitespace */ }
 .           {
-                fprintf(stderr,
-                    "[Lex Error] Line %d: unknown character '%s'\n",
-                    yylineno, yytext);
+                add_error("[Lex Error]    Line %d: unknown character '%s'", yylineno, yytext);
             }
 
 %%
@@ -117,6 +117,5 @@ static void comment(void)
             if (c == 0)  break;
         }
     }
-    fprintf(stderr,
-        "[Lex Error] Line %d: unterminated block comment\n", yylineno);
+    add_error("[Lex Error]    Line %d: unterminated block comment", yylineno);
 }
