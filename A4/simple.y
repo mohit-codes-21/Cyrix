@@ -159,21 +159,47 @@ static void show_quads(int from)
 {
     if (suppress_ir) return;
     if (from >= qn) { printf("  (no IR quads generated)\n"); return; }
-    printf("  +---------+---------------+---------------+---------------+---------------+\n");
-    printf("  |   No    |      op       |     arg1      |     arg2      |    result     |\n");
-    printf("  +---------+---------------+---------------+---------------+---------------+\n");
-    for (int i = from; i < qn; i++)
-        printf("  | %5d   | %-13s | %-13s | %-13s | %-13s |\n",
-               i+1, Q[i].op, Q[i].arg1, Q[i].arg2, Q[i].result);
-    printf("  +---------+---------------+---------------+---------------+---------------+\n");
+    printf("  +---------+---------------------------+---------------+---------------+---------------+---------------+\n");
+    printf("  |   No    |        expr               |      op       |     arg1      |     arg2      |    result     |\n");
+    printf("  +---------+---------------------------+---------------+---------------+---------------+---------------+\n");
+    for (int i = from; i < qn; i++) {
+        char expr[128];
+        const Quad *q = &Q[i];
+        if (strcmp(q->op, "=") == 0)
+            snprintf(expr, sizeof expr, "%s=%s", q->result, q->arg1);
+        else if (strcmp(q->op, "minus") == 0 || strcmp(q->op, "!") == 0 || strcmp(q->op, "~") == 0)
+            snprintf(expr, sizeof expr, "%s= %s %s", q->result, q->op, q->arg1);
+        else if (strcmp(q->op, "+") == 0 || strcmp(q->op, "-") == 0 || strcmp(q->op, "*") == 0 ||
+                 strcmp(q->op, "/") == 0 || strcmp(q->op, "%") == 0 || strcmp(q->op, "<") == 0 ||
+                 strcmp(q->op, ">") == 0 || strcmp(q->op, "<=") == 0 || strcmp(q->op, ">=") == 0 ||
+                 strcmp(q->op, "==") == 0 || strcmp(q->op, "!=") == 0 || strcmp(q->op, "&&") == 0 ||
+                 strcmp(q->op, "||") == 0)
+            snprintf(expr, sizeof expr, "%s=%s%s%s", q->result, q->arg1, q->op, q->arg2);
+        else if (strcmp(q->op, "ifFalse") == 0)
+            snprintf(expr, sizeof expr, "ifFalse %s goto %s", q->arg1, q->result);
+        else if (strcmp(q->op, "goto") == 0)
+            snprintf(expr, sizeof expr, "goto %s", q->arg1);
+        else if (strcmp(q->op, "label") == 0)
+            snprintf(expr, sizeof expr, "label %s", q->arg1);
+        else if (strcmp(q->op, "return") == 0) {
+            if (strcmp(q->arg1, "-") == 0) snprintf(expr, sizeof expr, "return");
+            else snprintf(expr, sizeof expr, "return %s", q->arg1);
+        }
+        else
+            snprintf(expr, sizeof expr, "%s %s %s %s", q->op, q->arg1, q->arg2, q->result);
+
+        printf("  | %5d   | %-25s | %-13s | %-13s | %-13s | %-13s |\n",
+               i+1, expr, q->op, q->arg1, q->arg2, q->result);
+    }
+    printf("  +---------+---------------------------+---------------+---------------+---------------+---------------+\n");
 }
 
 static void show_sym(void)
 {
     if (suppress_ir) return;
-    printf("  +------------------+---------+-------+------------+--------------+---------+--------------+\n");
-    printf("  |      Name        |  Type   | Scope | Decl Line  |  Live Until  |  Init?  |    Value     |\n");
-    printf("  +------------------+---------+-------+------------+--------------+---------+--------------+\n");
+    printf("  +------------------+---------+-------+-------------+--------------+---------+--------------+\n");
+    printf("  |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     |\n");
+    printf("  +------------------+---------+-------+-------------+--------------+---------+--------------+\n");
     int any = 0;
     for (int i = 0; i < sn; i++) {
         Sym *s = &ST[i];
@@ -188,7 +214,7 @@ static void show_sym(void)
     }
     if (!any)
         printf("  |                         (symbol table empty)                                        |\n");
-    printf("  +------------------+---------+-------+------------+--------------+---------+--------------+\n");
+    printf("  +------------------+---------+-------+-------------+--------------+---------+--------------+\n");
     printf("  (> = currently in scope)\n");
 }
 
@@ -261,18 +287,44 @@ static int  if_goto_pop(void)     { return if_goto_stack[if_goto_top--]; }
 static void print_summary(void)
 {
     printf("\n");
-    printf("+======+===============+===============+===============+===============+============+\n");
-    printf("|  No  |      op       |     arg1      |     arg2      |    result     |  Src Line  |\n");
-    printf("+======+===============+===============+===============+===============+============+\n");
-    for (int i = 0; i < qn; i++)
-        printf("| %4d | %-13s | %-13s | %-13s | %-13s | line %-5d  |\n",
-               i+1, Q[i].op, Q[i].arg1, Q[i].arg2, Q[i].result, Q[i].line);
-    printf("+------+---------------+---------------+---------------+---------------+------------+\n");
+    printf("+======+===========================+===============+===============+===============+===============+=============+\n");
+    printf("|  No  |           expr            |      op       |     arg1      |     arg2      |    result     |  Src Line   |\n");
+    printf("+======+===========================+===============+===============+===============+===============+=============+\n");
+    for (int i = 0; i < qn; i++) {
+        char expr[128];
+        const Quad *q = &Q[i];
+        if (strcmp(q->op, "=") == 0)
+            snprintf(expr, sizeof expr, "%s=%s", q->result, q->arg1);
+        else if (strcmp(q->op, "minus") == 0 || strcmp(q->op, "!") == 0 || strcmp(q->op, "~") == 0)
+            snprintf(expr, sizeof expr, "%s= %s %s", q->result, q->op, q->arg1);
+        else if (strcmp(q->op, "+") == 0 || strcmp(q->op, "-") == 0 || strcmp(q->op, "*") == 0 ||
+                 strcmp(q->op, "/") == 0 || strcmp(q->op, "%") == 0 || strcmp(q->op, "<") == 0 ||
+                 strcmp(q->op, ">") == 0 || strcmp(q->op, "<=") == 0 || strcmp(q->op, ">=") == 0 ||
+                 strcmp(q->op, "==") == 0 || strcmp(q->op, "!=") == 0 || strcmp(q->op, "&&") == 0 ||
+                 strcmp(q->op, "||") == 0)
+            snprintf(expr, sizeof expr, "%s=%s%s%s", q->result, q->arg1, q->op, q->arg2);
+        else if (strcmp(q->op, "ifFalse") == 0)
+            snprintf(expr, sizeof expr, "ifFalse %s goto %s", q->arg1, q->result);
+        else if (strcmp(q->op, "goto") == 0)
+            snprintf(expr, sizeof expr, "goto %s", q->arg1);
+        else if (strcmp(q->op, "label") == 0)
+            snprintf(expr, sizeof expr, "label %s", q->arg1);
+        else if (strcmp(q->op, "return") == 0) {
+            if (strcmp(q->arg1, "-") == 0) snprintf(expr, sizeof expr, "return");
+            else snprintf(expr, sizeof expr, "return %s", q->arg1);
+        }
+        else
+            snprintf(expr, sizeof expr, "%s %s %s %s", q->op, q->arg1, q->arg2, q->result);
+
+        printf("| %4d | %-25s | %-13s | %-13s | %-13s | %-13s | line %-5d  |\n",
+               i+1, expr, q->op, q->arg1, q->arg2, q->result, q->line);
+    }
+    printf("+------+---------------------------+---------------+---------------+---------------+---------------+-------------+\n");
 
     printf("\n");
-    printf("+==================+=========+=======+============+==============+=========+==============+=========+\n");
-    printf("|      Name        |  Type   | Scope | Decl Line  |  Live Until  |  Init?  |    Value     | Active? |\n");
-    printf("+==================+=========+=======+============+==============+=========+==============+=========+\n");
+    printf("+==================+=========+=======+=============+==============+=========+==============+=========+\n");
+    printf("|      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     | Active? |\n");
+    printf("+==================+=========+=======+=============+==============+=========+==============+=========+\n");
     for (int i = 0; i < sn; i++) {
         Sym *s = &ST[i];
         char e[20];
@@ -283,7 +335,7 @@ static void print_summary(void)
                e, s->init ? "yes" : "no", s->value,
                s->active ? "active" : "gone");
     }
-    printf("+------------------+---------+-------+------------+--------------+---------+--------------+---------+\n");
+    printf("+------------------+---------+-------+-------------+--------------+---------+--------------+---------+\n");
 }
 
 %}
@@ -883,12 +935,12 @@ int main(int argc, char **argv)
     }
     fclose(fp);
 
-    printf("+======================================================================+\n");
-    printf("|   Simple Language Compiler  --  Intermediate Code Generator          |\n");
-    printf("|   CS327 Compilers  --  Lab Assignment #4                             |\n");
-    printf("+----------------------------------------------------------------------+\n");
+    printf("+=======================================================================+\n");
+    printf("|   Simple Language Compiler  --  Intermediate Code Generator           |\n");
+    printf("|   CS327 Compilers  --  Lab Assignment #4                              |\n");
+    printf("+-----------------------------------------------------------------------+\n");
     printf("|   File: %-62s|\n", argv[1]);
-    printf("+======================================================================+\n");
+    printf("+=======================================================================+\n");
     printf("\n=== SOURCE PROGRAM ===================================================\n");
     for (int i = 0; i < src_cnt; i++)
         printf("  %4d | %s\n", i+1, src_lines[i]);

@@ -30,7 +30,7 @@ tests: $(TARGET)
 	@mkdir -p $(OUTPUTS)
 	@echo ""
 	@echo "═══════════════════════════════════════"
-	@echo "  Running all 10 test cases"
+	@echo "  Running all 16 test cases"
 	@echo "═══════════════════════════════════════"
 	@for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16; do \
 		echo ""; \
@@ -65,7 +65,7 @@ cleanall: clean
 help:
 	@echo ""
 	@echo "  make          — build the compiler"
-	@echo "  make tests    — build + run all 10 test cases"
+	@echo "  make tests    — build + run all 16 test cases"
 	@echo "  make run FILE=tests/testNN.c  — run one test"
 	@echo "  make clean    — remove build artifacts"
 	@echo "  make cleanall — remove build artifacts + outputs"

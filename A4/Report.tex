@@ -1,0 +1,762 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage[hidelinks,hypertexnames=false]{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{mdframed}
+
+% ── Code listing style ──────────────────────────────────────────────────
+\lstdefinestyle{cstyle}{
+    backgroundcolor=\color{gray!8},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{gray!50},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    numbersep=6pt,
+    keywordstyle=\color{blue!70}\bfseries,
+    commentstyle=\color{green!50!black}\itshape,
+    stringstyle=\color{red!60},
+    tabsize=4,
+    showstringspaces=false,
+}
+\lstdefinestyle{outputstyle}{
+    backgroundcolor=\color{black!4},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{gray!40},
+    numbers=none,
+    tabsize=4,
+    showstringspaces=false,
+}
+\lstset{style=cstyle}
+
+% ── Page style ──────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{CS327: Compilers --- Lab Assignment \#4}
+\lhead{Intermediate Code Generation}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\begin{document}
+
+% ════════════════════════════════════════════════════════════════════════
+% TITLE PAGE
+% ════════════════════════════════════════════════════════════════════════
+\begin{titlepage}
+    \centering
+
+    \vspace*{1.5cm}
+
+    {\Huge \textbf{CS327: Compilers}}\\[0.4cm]
+    {\LARGE \textbf{Lab Assignment \#4}}\\[1.2cm]
+
+    \rule{0.7\textwidth}{0.5pt}\\[0.6cm]
+    {\Large \textsc{Intermediate Code Generation}}\\[0.4cm]
+    {\large \textsc{Three-Address Code in Quadruple Format}}\\[0.6cm]
+    \rule{0.7\textwidth}{0.5pt}\\[1.8cm]
+
+    {\large \textbf{Submitted by}}\\[0.5cm]
+    \begin{tabular}{c}
+        Bhavya Parmar \\[0.2cm]
+        Mohit \\[0.2cm]
+        Surriya Gokul \\[0.2cm]
+        Tanishq Bhushan Chaudhari
+    \end{tabular}
+
+    \vspace{1.5cm}
+
+    {\large \textbf{Instructor}}\\[0.3cm]
+    Shouvick Mondal
+
+    \vfill
+
+    {\large
+    Semester: January--May 2026\\[0.2cm]
+    Indian Institute of Technology Gandhinagar
+    }
+\end{titlepage}
+
+% ════════════════════════════════════════════════════════════════════════
+% TABLE OF CONTENTS
+% ════════════════════════════════════════════════════════════════════════
+\pagenumbering{roman}
+\tableofcontents
+\newpage
+\pagenumbering{arabic}
+
+% ════════════════════════════════════════════════════════════════════════
+\section{Overview}
+% ════════════════════════════════════════════════════════════════════════
+
+This report documents the design and implementation of an \textbf{Intermediate Code Generator} for a C-like language called \textbf{Simple}, built as the fourth assignment of CS327 Compilers. The compiler translates source programs into \textbf{Three-Address Code (TAC)} represented in \textbf{Quadruple format}, following the Dragon Book (Aho, Lam, Sethi, Ullman) approach of Syntax-Directed Translation (SDT) with back-patching.
+
+\vspace{0.4cm}
+
+\noindent The compiler is implemented using \textbf{Flex} (lexer) and \textbf{Bison} (parser), and produces:
+\begin{itemize}[leftmargin=2cm]
+    \item A statement-by-statement IR trace with the source line echoed alongside generated quads and a live symbol table snapshot.
+    \item A complete quadruple table at the end of compilation.
+    \item A complete symbol table showing scope, lifetime, initialization status, and last known value for every declared variable.
+    \item Meaningful error diagnostics for semantic errors, with IR suppression on failure.
+\end{itemize}
+
+\vspace{0.4cm}
+
+\noindent The pipeline is fully end-to-end: source text $\rightarrow$ lexer $\rightarrow$ parser $\rightarrow$ SDT actions $\rightarrow$ quad table $\rightarrow$ formatted output.
+
+% ════════════════════════════════════════════════════════════════════════
+\section{Language Design: ``Simple''}
+% ════════════════════════════════════════════════════════════════════════
+
+For this assignment the team designed a focused, C-like language called \textbf{Simple}. The language was deliberately kept small so that every construct maps cleanly to well-defined TAC patterns, while still being expressive enough to write non-trivial programs.
+
+\subsection{Supported Types}
+
+\texttt{int}, \texttt{float}, \texttt{char}, \texttt{double}, \texttt{void}.
+
+\subsection{Supported Constructs}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Category} & \textbf{Constructs} \\
+\midrule
+Declarations & \texttt{int x;} \quad \texttt{int x = expr;} \\
+Arithmetic & \texttt{+}, \texttt{-}, \texttt{*}, \texttt{/}, \texttt{\%} with correct precedence \\
+Unary & Unary minus (\texttt{-}), logical NOT (\texttt{!}), bitwise NOT (\texttt{\textasciitilde}) \\
+Relational & \texttt{<}, \texttt{>}, \texttt{<=}, \texttt{>=}, \texttt{==}, \texttt{!=} \\
+Logical & \texttt{\&\&}, \texttt{||} \\
+Assignment & \texttt{=}, \texttt{+=}, \texttt{-=}, \texttt{*=}, \texttt{/=} \\
+Increment/Decrement & Prefix \texttt{++x}, \texttt{--x}; Postfix \texttt{x++}, \texttt{x--} \\
+Selection & \texttt{if}, \texttt{if-else}, nested \texttt{if-else} chains \\
+Iteration & \texttt{while}, \texttt{for} (with optional init/cond/update) \\
+Jump & \texttt{break}, \texttt{continue}, \texttt{return}, \texttt{return expr} \\
+Blocks & Nested \texttt{\{ \}} with full lexical scoping and variable shadowing \\
+Comments & \texttt{// ...} and \texttt{/* ... */} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Relation to Previous Assignment (Cyrix)}
+
+In Assignment 3, the team implemented a much richer grammar (Cyrix) with lambdas, \texttt{foreach}, \texttt{match}, \texttt{fn}, \texttt{var}, power operator (\texttt{**}), and more. For A4, the instructor confirmed that only the constructs explicitly listed in the assignment specification need IR generation. Therefore Simple is a clean, focused subset---all constructs in Simple have correct and complete IR generation, whereas the exotic Cyrix constructs (lambdas, generics, etc.) are not required and not present.
+
+% ════════════════════════════════════════════════════════════════════════
+\section{Part 1: Intermediate Code Generation}
+% ════════════════════════════════════════════════════════════════════════
+
+\subsection{Quadruple Representation}
+
+Each IR instruction is stored as a \textbf{quadruple}:
+
+\[
+(\underbrace{\texttt{op}}_{\text{operator}},\quad \underbrace{\texttt{arg1}}_{\text{first operand}},\quad \underbrace{\texttt{arg2}}_{\text{second operand}},\quad \underbrace{\texttt{result}}_{\text{destination}})
+\]
+
+Unused fields are printed as \texttt{-}. The table also carries an \texttt{expr} column that renders a human-readable form of each instruction (e.g.\ \texttt{t1=a+b}, \texttt{ifFalse t1 goto L2}) for quick reading.
+
+\subsection{Temporary Variable Generation}
+
+A global counter \texttt{tc} generates temporaries \texttt{t1}, \texttt{t2}, \ldots\ in sequential order. Similarly, a counter \texttt{lc} generates labels \texttt{L1}, \texttt{L2}, \ldots\
+
+\begin{lstlisting}[style=cstyle, language=C]
+static char *nt(void) { char *b=malloc(16); snprintf(b,16,"t%d",++tc); return b; }
+static char *nl(void) { char *b=malloc(16); snprintf(b,16,"L%d",++lc); return b; }
+\end{lstlisting}
+
+\subsection{SDT Actions for Expressions}
+
+Every expression non-terminal returns a \textbf{place} --- either a temporary name or the variable itself --- as its semantic value (\texttt{\$\$}). Quads are emitted bottom-up as the parser reduces rules.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Expression} & \textbf{Quads Emitted} & \textbf{Result Place} \\
+\midrule
+\texttt{A + B} & \texttt{(+, A, B, t)} & \texttt{t} \\
+\texttt{A - B} & \texttt{(-, A, B, t)} & \texttt{t} \\
+\texttt{A * B} & \texttt{(*, A, B, t)} & \texttt{t} \\
+\texttt{A / B} & \texttt{(/, A, B, t)} & \texttt{t} \\
+\texttt{A \% B} & \texttt{(\%, A, B, t)} & \texttt{t} \\
+\texttt{-E}    & \texttt{(minus, E, -, t)} & \texttt{t} \\
+\texttt{!E}    & \texttt{(!, E, -, t)} & \texttt{t} \\
+\texttt{x = E} & \texttt{(=, E, -, x)} & \texttt{x} \\
+\texttt{x += E}& \texttt{(+, x, E, t)}\quad\texttt{(=, t, -, x)} & \texttt{x} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Declaration IR}
+
+\begin{itemize}
+    \item \texttt{int x;} $\rightarrow$ symbol table entry only; \textbf{no quad emitted}. The variable appears in the symbol table with \texttt{Init? = no}.
+    \item \texttt{int x = E;} $\rightarrow$ symbol table entry \textbf{plus} \texttt{(=, E, -, x)}.
+\end{itemize}
+
+This follows the Dragon Book convention: uninitialised declarations simply reserve a name in the symbol table without generating code.
+
+\subsection{The Assignment PDF Example}
+
+The assignment specification includes the expression \texttt{a = b*-c + b*-c} as a reference. Our compiler (test16.c) produces exactly the expected quadruples:
+
+\begin{lstlisting}[style=outputstyle]
+| t1= minus c       | minus  | c      | -      | t1     |
+| t2=b*t1           | *      | b      | t1     | t2     |
+| t3= minus c       | minus  | c      | -      | t3     |
+| t4=b*t3           | *      | b      | t3     | t4     |
+| t5=t2+t4          | +      | t2     | t4     | t5     |
+| a=t5              | =      | t5     | -      | a      |
+\end{lstlisting}
+
+This matches the format shown in the assignment PDF exactly.
+
+% ════════════════════════════════════════════════════════════════════════
+\section{Part 2: Extended IR Support --- Control Flow}
+% ════════════════════════════════════════════════════════════════════════
+
+Control flow is handled using \textbf{back-patching}, following Dragon Book \S6.7. Labels and conditional jumps are emitted with placeholder targets (\texttt{??}) and later filled in once the target address is known.
+
+\subsection{if Statement}
+
+\[
+\texttt{if (C) S}
+\]
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Quad} & \textbf{Description} \\
+\midrule
+\texttt{(ifFalse, C, goto, ??)} & Jump if condition false; target back-patched to $L_f$ \\
+\textit{[S quads]} & Body \\
+\texttt{(label, $L_f$, -, -)} & False label \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{if-else Statement}
+
+\[
+\texttt{if (C) S else S1}
+\]
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Quad} & \textbf{Description} \\
+\midrule
+\texttt{(ifFalse, C, goto, ??)} & Jump to $L_f$ if false \\
+\textit{[S quads]} & True body \\
+\texttt{(goto, ??, -, -)} & Jump to $L_{end}$ \\
+\texttt{(label, $L_f$, -, -)} & False label \\
+\textit{[S1 quads]} & False body \\
+\texttt{(label, $L_{end}$, -, -)} & End label \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Nested \texttt{if-else} chains (e.g.\ \texttt{else if}) are handled naturally because \texttt{else if} is just an \texttt{if-else} where the else-body is itself another \texttt{if-else}. A dedicated LIFO \textbf{if-goto stack} (\texttt{if\_goto\_stack}) ensures that the \texttt{goto Lend} quad index for each level is stored independently and never overwritten by inner levels.
+
+\subsection{while Loop}
+
+\[
+\texttt{while (C) S}
+\]
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Quad} & \textbf{Description} \\
+\midrule
+\texttt{(label, $L_s$, -, -)} & Loop start \\
+\textit{[C evaluation]} & Condition \\
+\texttt{(ifFalse, C, goto, ??)} & Exit if false; patched to $L_{end}$ \\
+\textit{[S quads]} & Body \\
+\texttt{(goto, $L_s$, -, -)} & Back-edge \\
+\texttt{(label, $L_{end}$, -, -)} & Exit label \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{for Loop}
+
+\[
+\texttt{for (init; cond; update) S}
+\]
+
+The for loop is the most complex construct. Our IR follows the standard Dragon Book layout where the \textbf{update code is placed before the body} (using a forward jump), ensuring correct execution order while keeping the condition check at the top of each iteration:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Quad} & \textbf{Description} \\
+\midrule
+\textit{[init quads]} & Initialiser \\
+\texttt{(label, $L_{test}$, -, -)} & Condition check point \\
+\texttt{(ifFalse, cond, goto, ??)} & Exit if false; patched to $L_{end}$ \\
+\texttt{(goto, ??, -, -)} & Forward jump to $L_{body}$; patched at emit time \\
+\texttt{(label, $L_{update}$, -, -)} & Update section \\
+\textit{[update quads]} & Increment/decrement \\
+\texttt{(goto, $L_{test}$, -, -)} & Loop back to condition \\
+\texttt{(label, $L_{body}$, -, -)} & Body entry \\
+\textit{[S quads]} & Body \\
+\texttt{(goto, $L_{update}$, -, -)} & Jump to update \\
+\texttt{(label, $L_{end}$, -, -)} & Exit label \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent The \texttt{continue} statement jumps to $L_{update}$ (not $L_{test}$), correctly re-running the update before re-testing the condition. The \texttt{break} statement's goto quad index is collected into a per-loop \textbf{break buffer} and back-patched to $L_{end}$ when the loop closes.
+
+\subsection{Implementation Detail: the \texttt{for\_gbody} Global}
+
+Yacc mid-rule actions occupy exactly one union slot (\texttt{\$\$}). The for-loop's update mid-rule action needs to pass both a label string (\texttt{Lupdate}) and an integer (the \texttt{goto Lbody} quad index) to the closing action --- but a single slot can only hold one. We store the quad index in a \textbf{static global} \texttt{for\_gbody} and the label string in the slot. This is safe because for-loops do not recursively re-enter their own mid-rule actions.
+
+% ════════════════════════════════════════════════════════════════════════
+\section{Part 3: Code Output Format}
+% ════════════════════════════════════════════════════════════════════════
+
+\subsection{Output Structure}
+
+The compiler produces a rich, multi-section output for every source file:
+
+\begin{enumerate}
+    \item \textbf{Banner} --- compiler name, assignment, and source file name.
+    \item \textbf{Source program} --- echoed with line numbers.
+    \item \textbf{Statement-by-statement trace} --- for each statement:
+    \begin{enumerate}[label=\alph*.]
+        \item Source line (with line number)
+        \item Newly generated IR quads in tabular format
+        \item Current symbol table state
+    \end{enumerate}
+    \item \textbf{Final complete quadruple table} --- all quads with source line annotation.
+    \item \textbf{Final complete symbol table} --- all variables with full lifetime and scope information.
+\end{enumerate}
+
+\subsection{Quadruple Table Format}
+
+Each row has six columns: \texttt{No} (sequence number), \texttt{expr} (human-readable form), \texttt{op}, \texttt{arg1}, \texttt{arg2}, \texttt{result}. The \texttt{expr} column is generated by the printer by inspecting the \texttt{op} field and formatting accordingly --- for example, a binary op becomes \texttt{result=arg1 op arg2}; an \texttt{ifFalse} quad becomes \texttt{ifFalse arg1 goto result}.
+
+\begin{lstlisting}[style=outputstyle, basicstyle=\ttfamily\scriptsize, columns=fixed, keepspaces=true, basewidth=0.5em]
++======+=====================+===============+===============+===============+===============+=============+
+|  No  |        expr         |      op       |     arg1      |     arg2      |    result     |  Src Line   |
++======+=====================+===============+===============+===============+===============+=============+
+|    3 | t1=a+b              | +             | a             | b             | t1            | line 4      |
+|    4 | c=t1                | =             | t1            | -             | c             | line 4      |
+\end{lstlisting}
+
+\subsection{Symbol Table Format}
+
+The symbol table is printed after every statement, showing scope depth, declaration line, live-until (either ``active'' or the closing line number), initialisation status, and the last known value.
+
+\begin{lstlisting}[style=outputstyle, basicstyle=\ttfamily\scriptsize, columns=fixed, keepspaces=true, basewidth=0.5em]
+    +------------------+---------+-------+-------------+--------------+---------+--------------+
+    |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     |
+    +------------------+---------+-------+-------------+--------------+---------+--------------+
+    |>x                | int     |   0   | line 2      | active       | yes     | 1            |
+    | x                | int     |   1   | line 5      | line 11      | yes     | 100          |
+    +------------------+---------+-------+-------------+--------------+---------+--------------+
+    (> = currently in scope)
+\end{lstlisting}
+
+The \texttt{>} marker identifies variables currently in scope. Out-of-scope (``gone'') variables from closed blocks are also retained in the table for historical completeness.
+
+\subsection{Note on Expression Statements}
+
+For bare expression statements (e.g.\ \texttt{z += 4;}) the IR quads are emitted during expression evaluation (before the semicolon reduces), so by the time the \texttt{expression\_statement} action fires, the quads already exist in the table. The statement-level display therefore shows only the updated symbol table for these statements, rather than repeating the quads. This is a minor display quirk --- the quads themselves are always present in the final quadruple table in the correct position.
+
+% ════════════════════════════════════════════════════════════════════════
+\section{Part 4: Error Handling}
+% ════════════════════════════════════════════════════════════════════════
+
+\subsection{Design: Error Buffering with IR Suppression}
+
+Rather than printing errors to \texttt{stderr} interleaved with normal output, the compiler uses an \textbf{error buffer} design:
+
+\begin{lstlisting}[style=cstyle, language=C]
+typedef struct { char msg[256]; } ErrEntry;
+static ErrEntry ERR[MAX_ERRORS];
+static int      err_cnt = 0;
+static int      suppress_ir = 0;
+
+void add_error(const char *fmt, ...) {
+    /* collect error; set suppress_ir = 1 */
+}
+\end{lstlisting}
+
+All errors (lex, parse, and semantic) call \texttt{add\_error()}, which buffers them. The \texttt{suppress\_ir} flag prevents any IR output from being printed. At the end of compilation, \texttt{main()} makes one decision:
+
+\begin{itemize}
+    \item \textbf{No errors:} Print full IR output, final quad table, final symbol table, and \texttt{[OK]}.
+    \item \textbf{Errors:} Print all buffered error messages together in a dedicated \textbf{ERRORS DETECTED} section, and \texttt{[FAIL]}. IR is suppressed entirely.
+\end{itemize}
+
+This produces clean, unambiguous output: a user either gets full IR or a clean error report --- never a mix.
+
+\subsection{Detected Error Categories}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}p{5cm}p{4cm}p{5cm}@{}}
+\toprule
+\textbf{Error Type} & \textbf{Detection Point} & \textbf{Message Format} \\
+\midrule
+Redeclaration in same scope & \texttt{sym\_decl()} & \texttt{[Semantic Error] Line N: 'x' already declared (first at line M)} \\
+Use of undeclared variable & \texttt{primary\_expression} & \texttt{[Semantic Error] Line N: use of undeclared variable 'x'} \\
+Assignment to undeclared variable & \texttt{assignment\_expression} & \texttt{[Semantic Error] Line N: assignment to undeclared variable 'x'} \\
+\texttt{break} outside loop & \texttt{jump\_statement} & \texttt{[Semantic Error] Line N: 'break' outside a loop} \\
+\texttt{continue} outside loop & \texttt{jump\_statement} & \texttt{[Semantic Error] Line N: 'continue' outside a loop} \\
+Unknown character & \texttt{simple.l} rule & \texttt{[Lex Error] Line N: unknown character 'X'} \\
+Syntax error & \texttt{yyerror()} & \texttt{[Parse Error] Line N near 'tok': ...} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Parser Error Verbosity}
+
+The parser uses \texttt{\%define parse.error verbose} so Bison generates error messages that name the unexpected token and list the tokens that were expected, making syntax errors highly informative.
+
+% ════════════════════════════════════════════════════════════════════════
+\section{Symbol Table Design}
+% ════════════════════════════════════════════════════════════════════════
+
+\subsection{Structure}
+
+\begin{lstlisting}[style=cstyle, language=C]
+typedef struct {
+    char name[64], type[16], value[64];
+    int  scope;    /* nesting depth at declaration */
+    int  init;     /* 0 = declared only, 1 = assigned at least once */
+    int  decl;     /* source line of declaration */
+    int  end;      /* line where scope closed (-1 = still live) */
+    int  active;   /* 1 = currently visible */
+} Sym;
+\end{lstlisting}
+
+\subsection{Scoping Rules}
+
+\begin{itemize}
+    \item Every \texttt{\{} block increments the scope depth; every \texttt{\}} decrements it and marks all variables at that depth as inactive (setting \texttt{end} to the current line).
+    \item \textbf{Lookup is innermost-scope-first}: the table is scanned from newest to oldest, so inner declarations shadow outer ones of the same name.
+    \item \textbf{Redeclaration} within the \emph{same} scope at the \emph{same} depth is an error. Redeclaration in an \emph{inner} scope (shadowing) is legal and correctly handled.
+    \item \textbf{Value tracking}: after a constant assignment (\texttt{x = 5}), the value \texttt{5} is recorded in the symbol table. After an expression assignment (\texttt{x = t3}), the temp name is recorded. This gives the evaluator visibility into what each variable currently holds.
+\end{itemize}
+
+% ════════════════════════════════════════════════════════════════════════
+\section{Test Cases}
+% ════════════════════════════════════════════════════════════════════════
+
+The compiler was tested with \textbf{16 programs}: 10 standard programs (tests 01--10), 5 error-handling programs (tests 11--15), and 1 program replicating the assignment PDF example (test 16).
+
+\subsection{Tests 01--10: Standard Programs}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}cll@{}}
+\toprule
+\textbf{Test} & \textbf{Description} & \textbf{Key Constructs Exercised} \\
+\midrule
+01 & Basic arithmetic and assignment & \texttt{+}, \texttt{-}, \texttt{*}, \texttt{/}, declarations, \texttt{=} \\
+02 & Unary operators and compound assignments & \texttt{-x}, \texttt{+=}, \texttt{-=}, \texttt{*=}, \texttt{/=} \\
+03 & Simple \texttt{if} (no else) & Conditional jump, back-patching \\
+04 & \texttt{if-else} & Two-branch selection \\
+05 & \texttt{while} loop & Loop labels, back-edge, condition \\
+06 & \texttt{for} loop & All 4 labels, update before body \\
+07 & Nested \texttt{if-else} (grade classifier) & 3-level nesting, if-goto stack \\
+08 & Block scoping and variable shadowing & Two \texttt{x} variables, scope table \\
+09 & \texttt{for} loop with \texttt{break} and \texttt{continue} & Break buffer, continue target \\
+10 & Nested loops + \texttt{\&\&} + \texttt{+=} & Full integration, 30 quads \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Test 01 --- Basic Arithmetic (Excerpt)}
+
+\textbf{Source:}
+\begin{lstlisting}[style=cstyle, language=C]
+int a = 5;
+int b = 10;
+int c = a + b;
+int d = a * b - c;
+int e;
+e = d / 2;
+\end{lstlisting}
+
+\textbf{Final Quadruple Table:}
+\begin{lstlisting}[style=outputstyle]
+|    1 | a=5         | =     | 5    | -    | a    | line 2  |
+|    2 | b=10        | =     | 10   | -    | b    | line 3  |
+|    3 | t1=a+b      | +     | a    | b    | t1   | line 4  |
+|    4 | c=t1        | =     | t1   | -    | c    | line 4  |
+|    5 | t2=a*b      | *     | a    | b    | t2   | line 5  |
+|    6 | t3=t2-c     | -     | t2   | c    | t3   | line 5  |
+|    7 | d=t3        | =     | t3   | -    | d    | line 5  |
+|    8 | t4=d/2      | /     | d    | 2    | t4   | line 7  |
+|    9 | e=t4        | =     | t4   | -    | e    | line 7  |
+\end{lstlisting}
+
+\subsubsection{Test 05 --- while Loop (Excerpt)}
+
+\textbf{Source:}
+\begin{lstlisting}[style=cstyle, language=C]
+int i = 0;
+int sum = 0;
+while (i < 5) {
+    sum = sum + i;
+    i = i + 1;
+}
+\end{lstlisting}
+
+\textbf{Final Quadruple Table:}
+\begin{lstlisting}[style=outputstyle]
+|    3 | label L1          | label   | L1   | -    | -    | line 4  |
+|    4 | t1=i<5            | <       | i    | 5    | t1   | line 4  |
+|    5 | ifFalse t1 goto L2| ifFalse | t1   | goto | L2   | line 4  |
+|    6 | t2=sum+i          | +       | sum  | i    | t2   | line 5  |
+|    7 | sum=t2            | =       | t2   | -    | sum  | line 5  |
+|    8 | t3=i+1            | +       | i    | 1    | t3   | line 6  |
+|    9 | i=t3              | =       | t3   | -    | i    | line 6  |
+|   10 | goto L1           | goto    | L1   | -    | -    | line 7  |
+|   11 | label L2          | label   | L2   | -    | -    | line 7  |
+\end{lstlisting}
+
+\subsubsection{Test 07 --- Nested if-else (Excerpt)}
+
+\textbf{Source:}
+\begin{lstlisting}[style=cstyle, language=C]
+int marks = 82;
+int grade;
+if (marks >= 90)       grade = 10;
+else if (marks >= 80)  grade = 9;
+else if (marks >= 70)  grade = 8;
+else                   grade = 7;
+\end{lstlisting}
+
+\textbf{Final Quadruple Table (control-flow quads only):}
+\begin{lstlisting}[style=outputstyle]
+|    2 | t1=marks>=90       | >=      | marks| 90   | t1   |
+|    3 | ifFalse t1 goto L1 | ifFalse | t1   | goto | L1   |
+|    4 | grade=10           | =       | 10   | -    | grade|
+|    5 | goto L6            | goto    | L6   | -    | -    |  <- patched
+|    6 | label L1           | label   | L1   | -    | -    |
+|    7 | t2=marks>=80       | >=      | marks| 80   | t2   |
+|    8 | ifFalse t2 goto L2 | ifFalse | t2   | goto | L2   |
+|    9 | grade=9            | =       | 9    | -    | grade|
+|   10 | goto L5            | goto    | L5   | -    | -    |  <- patched
+|   11 | label L2           | label   | L2   | -    | -    |
+    ... (continues to L3, L4, L5, L6)
+|   18 | label L4           | label   | L4   | -    | -    |
+|   19 | label L5           | label   | L5   | -    | -    |
+|   20 | label L6           | label   | L6   | -    | -    |
+\end{lstlisting}
+
+Each \texttt{goto} is correctly back-patched to its matching end-label via the LIFO \texttt{if\_goto\_stack}.
+
+\subsubsection{Test 08 --- Scoping (Excerpt)}
+
+\textbf{Source:}
+\begin{lstlisting}[style=cstyle, language=C]
+int x = 1;
+int y = 2;
+{
+    int x = 100;   /* shadows outer x */
+    y = x + y;    /* uses inner x=100 */
+    { int z = x * 2; y = y + z; }
+}
+int result = x + y;  /* uses outer x=1 */
+\end{lstlisting}
+
+The symbol table snapshot after the outer block closes correctly shows the inner \texttt{x} (scope 1) as \texttt{gone} and the outer \texttt{x} (scope 0) as \texttt{active}. The quad \texttt{(+, x, y, t4)} for \texttt{result} uses the outer \texttt{x=1}.
+
+\subsubsection{Test 09 --- break and continue}
+
+\textbf{Source:}
+\begin{lstlisting}[style=cstyle, language=C]
+for (i = 0; i < 10; i = i + 1) {
+    if (i == 5) break;
+    if (i == 2) continue;
+    sum = sum + i;
+}
+\end{lstlisting}
+
+\textbf{Key quads:}
+\begin{lstlisting}[style=outputstyle]
+|   14 | goto L6   |  <- break:    jumps to Lend (L6), back-patched
+|   18 | goto L2   |  <- continue: jumps to Lupdate (L2)
+\end{lstlisting}
+
+\subsection{Tests 11--15: Error Handling}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}clll@{}}
+\toprule
+\textbf{Test} & \textbf{Error Scenario} & \textbf{Errors Detected} & \textbf{Outcome} \\
+\midrule
+11 & Redeclaration of \texttt{x} in same scope & 1 semantic error & \texttt{[FAIL]}, IR suppressed \\
+12 & Use of undeclared \texttt{c} and \texttt{e} & 2 semantic errors & \texttt{[FAIL]}, IR suppressed \\
+13 & \texttt{break}/\texttt{continue} outside loop & 2 semantic errors & \texttt{[FAIL]}, IR suppressed \\
+14 & Unknown characters \texttt{@} and \texttt{\#} & 1 lex + 1 parse error & \texttt{[FAIL]}, IR suppressed \\
+15 & Mixed: scope redeclaration + undeclared var & 2 semantic errors & \texttt{[FAIL]}, IR suppressed \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Example error output (test 11):}
+\begin{lstlisting}[style=outputstyle]
+=== ERRORS DETECTED (1) =====================================
+  [Semantic Error] Line 4: 'x' already declared in this scope
+                           (first declared at line 2)
+======================================================================
+[FAIL] 1 error(s) found. IR output suppressed.
+\end{lstlisting}
+
+\subsection{Test 16 --- Assignment PDF Example}
+
+\textbf{Source:}
+\begin{lstlisting}[style=cstyle, language=C]
+int a = 1;
+int b = 2;
+int c = 3;
+a = b * -c + b * -c;
+\end{lstlisting}
+
+\textbf{Final Quadruple Table:}
+\begin{lstlisting}[style=outputstyle]
+|    4 | t1= minus c   | minus | c    | -    | t1   | line 4  |
+|    5 | t2=b*t1       | *     | b    | t1   | t2   | line 4  |
+|    6 | t3= minus c   | minus | c    | -    | t3   | line 4  |
+|    7 | t4=b*t3       | *     | b    | t3   | t4   | line 4  |
+|    8 | t5=t2+t4      | +     | t2   | t4   | t5   | line 4  |
+|    9 | a=t5          | =     | t5   | -    | a    | line 4  |
+\end{lstlisting}
+
+This is an exact match of the quadruple table shown in the assignment specification.
+
+% ════════════════════════════════════════════════════════════════════════
+\section{Implementation Pipeline}
+% ════════════════════════════════════════════════════════════════════════
+
+\subsection{File Structure}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{File} & \textbf{Role} & \textbf{Lines} \\
+\midrule
+\texttt{simple.l} & Flex lexer & $\approx$100 \\
+\texttt{simple.y} & Bison parser + SDT + all IR logic & $\approx$1000 \\
+\texttt{Makefile} & Build automation & 40 \\
+\texttt{tests/test01--10.c} & Standard test programs & 10 files \\
+\texttt{tests/test11--15.c} & Error-handling test programs & 5 files \\
+\texttt{tests/test16.c} & Assignment PDF example & 1 file \\
+\texttt{outputs/output01--16.txt} & Outputs & 16 files \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Build and Run}
+
+\begin{lstlisting}[style=outputstyle]
+sudo apt install bison flex   # one-time install
+make                          # build the compiler
+make tests                    # run all 16 tests, save outputs
+make run FILE=tests/test01.c  # run a single test
+make clean                    # remove build artifacts
+\end{lstlisting}
+
+\subsection{Data Flow}
+
+\begin{center}
+\texttt{source.c}
+$\xrightarrow{\text{flex (simple.l)}}$
+token stream
+$\xrightarrow{\text{bison (simple.y)}}$
+LALR(1) parse + SDT
+$\xrightarrow{\text{emit\_q()}}$
+quad table
+$\xrightarrow{\text{print\_summary()}}$
+formatted output
+\end{center}
+
+% ════════════════════════════════════════════════════════════════════════
+\section{Team Contributions}
+% ════════════════════════════════════════════════════════════════════════
+
+\begin{center}
+\renewcommand{\arraystretch}{1.5}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+\textbf{Team Member} & \textbf{Contribution} \\
+\midrule
+Bhavya Parmar & \textit{Rewrote the previous Cyrix grammar for this assignment (removed extra constructs).} \\[0.5cm]
+Mohit & \textit{SDT for basic constructs; IR output formatting and output veriification.} \\[0.5cm]
+Surriya Gokul & \textit{Control-flow SDT (if/else/loops) and back-patching logic checks.} \\[0.5cm]
+Tanishq Bhushan Chaudhari & \textit{Test suite creation (tests 01--16), output verification, and report write-up polishing.} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% ════════════════════════════════════════════════════════════════════════
+\section{Design Decisions and Justifications}
+% ════════════════════════════════════════════════════════════════════════
+
+\begin{enumerate}
+
+\item \textbf{Named non-terminal \texttt{if\_prefix} for if/if-else.}
+    Writing two separate rules both starting with \texttt{IF '(' expression ')'} caused 22 reduce/reduce conflicts in Bison (the parser cannot tell which rule to start reducing until it sees \texttt{ELSE} or not). Factoring the shared prefix into \texttt{if\_prefix} reduces this to the single expected dangling-else shift/reduce conflict, which Bison resolves correctly by default (shift = attach else to nearest if).
+
+\item \textbf{LIFO \texttt{if\_goto\_stack} for nested if-else.}
+    The \texttt{goto Lend} quad index from the outer if-else must survive while the inner if-else runs. A single global is overwritten; a stack preserves each level independently.
+
+\item \textbf{\texttt{for\_gbody} global for the for-loop.}
+    A single mid-rule action slot cannot carry both a \texttt{char*} (Lupdate label) and an \texttt{int} (goto Lbody index). The static global \texttt{for\_gbody} carries the integer, while the slot carries the string. This is safe because for-loop mid-rule actions do not re-enter each other recursively.
+
+\item \textbf{Error buffering and IR suppression.}
+    Rather than printing errors to stderr mid-output, all errors are buffered. If any error occurred, the final output is a clean error report with no partial IR. This prevents the evaluator from seeing corrupted or misleading intermediate code.
+
+\item \textbf{Dragon Book quadruple convention, no optimisation.}
+    All IR is emitted exactly as the Dragon Book prescribes, with no constant folding, dead-code elimination, or any other optimisation. This ensures the output is predictable and matches lecture slide conventions.
+
+\item \textbf{\texttt{\%option yylineno} in Flex.}
+    Rather than manually maintaining a line counter in the lexer, \texttt{\%option yylineno} asks Flex to track line numbers automatically. This eliminates the \texttt{yylineno} redefinition error that occurs when the lexer and the Flex-generated \texttt{lex.yy.c} both try to define the same variable.
+
+\end{enumerate}
+
+% ════════════════════════════════════════════════════════════════════════
+\section{Conclusion}
+% ════════════════════════════════════════════════════════════════════════
+
+The Simple compiler correctly implements all four parts of Assignment 4:
+
+\begin{itemize}
+    \item \textbf{Part 1} --- IR generation for arithmetic, assignment, unary operators, and temporary variable generation, verified against the assignment PDF example.
+    \item \textbf{Part 2} --- Extended IR for \texttt{if}, \texttt{if-else}, \texttt{while}, \texttt{for}, \texttt{break}, and \texttt{continue}, using Dragon Book back-patching.
+    \item \textbf{Part 3} --- Clean tabular output with an \texttt{expr} column, a live symbol table after each statement, and a final complete quad table.
+    \item \textbf{Part 4} --- Seven distinct error categories detected and reported clearly, with IR suppressed on any error.
+\end{itemize}
+
+The compiler has been tested with 16 programs (10 standard + 5 erroneous + 1 PDF example) and all outputs have been verified correct. The system is ready for evaluation.
+
+\end{document}
