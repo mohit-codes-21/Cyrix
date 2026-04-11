@@ -16,7 +16,7 @@ E   ([Ee][+-]?{D}+)
 FS  (f|F|l|L)
 IS  (((u|U)(l|L|ll|LL)?)|((l|L|ll|LL)(u|U)?))
 ES  (\\(['"\?\\abfnrtv]|[0-7]{1,3}|x[a-fA-F0-9]+))
-WS  [ \t\v\f]
+WS  [ \t\v\f\r]
 
 %{
 #include <stdio.h>
