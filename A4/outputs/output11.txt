@@ -10,7 +10,7 @@
      2 | int x = 5;
      3 | int y = 10;
      4 | int x = 20;
-     5 | int z = x + y;
+     5 | void z = x + y;
 ======================================================================
 
 === STATEMENT-BY-STATEMENT IR GENERATION =============================
@@ -54,8 +54,9 @@
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   (> = currently in scope)
 
-=== ERRORS DETECTED (1) =====================================
+=== ERRORS DETECTED (2) =====================================
   [Semantic Error] Line 4: 'x' already declared in this scope (first declared at line 2)
+  [Semantic Error] Line 5: void variable 'z' cannot be initialized
 ======================================================================
 
-[FAIL] 1 error(s) found. IR output suppressed.
+[FAIL] 2 error(s) found. IR output suppressed.

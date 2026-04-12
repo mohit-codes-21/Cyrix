@@ -2,4 +2,4 @@
 int x = 5;
 int y = 10;
 int x = 20;
-int z = x + y;
+void z = x + y;

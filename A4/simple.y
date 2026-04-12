@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <ctype.h>
 
 extern int   yylineno;
 extern char *yytext;
@@ -87,8 +88,43 @@ static void bp_arg1(int i, const char *v) { snprintf(Q[i].arg1,  64,"%s",v); }
    TEMPORARIES AND LABELS
    ═══════════════════════════════════════════════════════ */
 static int tc = 0, lc = 0;
+static char *temp_types[8192];
 static char *nt(void){char *b=malloc(16);snprintf(b,16,"t%d",++tc);return b;}
 static char *nl(void){char *b=malloc(16);snprintf(b,16,"L%d",++lc);return b;}
+
+static int temp_index(const char *t)
+{
+    if (!t || t[0] != 't') return -1;
+    if (!isdigit((unsigned char)t[1])) return -1;
+    int v = 0;
+    for (int i = 1; t[i]; i++) {
+        if (!isdigit((unsigned char)t[i])) break;
+        v = (v * 10) + (t[i] - '0');
+    }
+    return v;
+}
+
+static void set_temp_type(const char *t, const char *ty)
+{
+    int idx = temp_index(t);
+    if (idx <= 0 || idx >= 8192) return;
+    if (temp_types[idx]) free(temp_types[idx]);
+    temp_types[idx] = strdup(ty);
+}
+
+static const char *get_temp_type(const char *t)
+{
+    int idx = temp_index(t);
+    if (idx <= 0 || idx >= 8192) return NULL;
+    return temp_types[idx];
+}
+
+static char *nt_of_type(const char *ty)
+{
+    char *b = nt();
+    set_temp_type(b, ty);
+    return b;
+}
 
 /* ═══════════════════════════════════════════════════════
    SYMBOL TABLE
@@ -152,6 +188,47 @@ static void sym_mk(const char *nm)
     if (s) s->init = 1;
 }
 
+static int is_float_literal(const char *s)
+{
+    if (!s) return 0;
+    for (const char *p = s; *p; p++)
+        if (*p == '.' || *p == 'e' || *p == 'E') return 1;
+    return 0;
+}
+
+static const char *type_of_place(const char *p)
+{
+    const char *t = get_temp_type(p);
+    if (t) return t;
+    Sym *s = sym_look(p);
+    if (s) return s->type;
+    return is_float_literal(p) ? "float" : "int";
+}
+
+static char *cast_place(const char *p, const char *from, const char *to)
+{
+    if (!p || !from || !to) return (char *)p;
+    if (strcmp(from, to) == 0) return (char *)p;
+    if (strcmp(from, "int") == 0 && strcmp(to, "float") == 0) {
+        char *t = nt_of_type("float");
+        emit_q("itof", p, "-", t);
+        return t;
+    }
+    if (strcmp(from, "float") == 0 && strcmp(to, "int") == 0) {
+        char *t = nt_of_type("int");
+        emit_q("ftoi", p, "-", t);
+        return t;
+    }
+    return (char *)p;
+}
+
+static const char *common_numeric_type(const char *t1, const char *t2)
+{
+    if (!t1 || !t2) return "int";
+    if (strcmp(t1, "float") == 0 || strcmp(t2, "float") == 0) return "float";
+    return "int";
+}
+
 /* ═══════════════════════════════════════════════════════
    DISPLAY
    ═══════════════════════════════════════════════════════ */
@@ -169,6 +246,8 @@ static void show_quads(int from)
             snprintf(expr, sizeof expr, "%s=%s", q->result, q->arg1);
         else if (strcmp(q->op, "minus") == 0 || strcmp(q->op, "!") == 0 || strcmp(q->op, "~") == 0)
             snprintf(expr, sizeof expr, "%s= %s %s", q->result, q->op, q->arg1);
+        else if (strcmp(q->op, "itof") == 0 || strcmp(q->op, "ftoi") == 0)
+            snprintf(expr, sizeof expr, "%s= %s(%s)", q->result, q->op, q->arg1);
         else if (strcmp(q->op, "+") == 0 || strcmp(q->op, "-") == 0 || strcmp(q->op, "*") == 0 ||
                  strcmp(q->op, "/") == 0 || strcmp(q->op, "%") == 0 || strcmp(q->op, "<") == 0 ||
                  strcmp(q->op, ">") == 0 || strcmp(q->op, "<=") == 0 || strcmp(q->op, ">=") == 0 ||
@@ -297,6 +376,8 @@ static void print_summary(void)
             snprintf(expr, sizeof expr, "%s=%s", q->result, q->arg1);
         else if (strcmp(q->op, "minus") == 0 || strcmp(q->op, "!") == 0 || strcmp(q->op, "~") == 0)
             snprintf(expr, sizeof expr, "%s= %s %s", q->result, q->op, q->arg1);
+        else if (strcmp(q->op, "itof") == 0 || strcmp(q->op, "ftoi") == 0)
+            snprintf(expr, sizeof expr, "%s= %s(%s)", q->result, q->op, q->arg1);
         else if (strcmp(q->op, "+") == 0 || strcmp(q->op, "-") == 0 || strcmp(q->op, "*") == 0 ||
                  strcmp(q->op, "/") == 0 || strcmp(q->op, "%") == 0 || strcmp(q->op, "<") == 0 ||
                  strcmp(q->op, ">") == 0 || strcmp(q->op, "<=") == 0 || strcmp(q->op, ">=") == 0 ||
@@ -349,7 +430,7 @@ static void print_summary(void)
 
 %token <sval> IDENTIFIER I_CONSTANT F_CONSTANT
 %token IF ELSE WHILE FOR RETURN BREAK CONTINUE
-%token INT FLOAT CHAR DOUBLE VOID
+%token INT FLOAT VOID
 %token INC_OP DEC_OP AND_OP OR_OP
 %token LE_OP GE_OP EQ_OP NE_OP
 %token ADD_ASSIGN SUB_ASSIGN MUL_ASSIGN DIV_ASSIGN
@@ -415,8 +496,6 @@ compound_statement
 type_specifier
     : INT    { $$ = strdup("int");    }
     | FLOAT  { $$ = strdup("float");  }
-    | CHAR   { $$ = strdup("char");   }
-    | DOUBLE { $$ = strdup("double"); }
     | VOID   { $$ = strdup("void");   }
     ;
 
@@ -439,7 +518,20 @@ declaration_statement
         {
             int q0 = qn, ln = yylineno;
             Sym *s = sym_decl($2, $1);
-            if (s) { emit_q("=", $4, "-", $2); sym_sv($2, $4); }
+            if (s) {
+                if (strcmp(s->type, "void") == 0)
+                    add_error("[Semantic Error] Line %d: void variable '%s' cannot be initialized", yylineno, $2);
+                else {
+                    const char *rt = type_of_place($4);
+                    if (strcmp(rt, "void") == 0)
+                        add_error("[Semantic Error] Line %d: void value used in initialization of '%s'", yylineno, $2);
+                    else {
+                        char *rhs = cast_place($4, rt, s->type);
+                        emit_q("=", rhs, "-", $2);
+                        sym_sv($2, rhs);
+                    }
+                }
+            }
             show_stmt(ln, q0);
             free($1); free($2); free($4);
         }
@@ -500,7 +592,11 @@ if_prefix
         {
             /* Emit the conditional jump with placeholder target.
                Return the quad index so the outer rule can back-patch it. */
-            $$ = emit_q("ifFalse", $3, "goto", "??");
+            const char *ct = type_of_place($3);
+            if (strcmp(ct, "void") == 0)
+                add_error("[Semantic Error] Line %d: void expression used in if-condition", yylineno);
+            char *cond = (strcmp(ct, "float") == 0) ? cast_place($3, "float", "int") : $3;
+            $$ = emit_q("ifFalse", cond, "goto", "??");
             free($3);
         }
     ;
@@ -586,7 +682,11 @@ iteration_statement
       expression ')'
         {
             /* slot $6 = ifFalse quad index */
-            $<ival>$ = emit_q("ifFalse", $4, "goto", "??");
+            const char *ct = type_of_place($4);
+            if (strcmp(ct, "void") == 0)
+                add_error("[Semantic Error] Line %d: void expression used in while-condition", yylineno);
+            char *cond = (strcmp(ct, "float") == 0) ? cast_place($4, "float", "int") : $4;
+            $<ival>$ = emit_q("ifFalse", cond, "goto", "??");
             free($4);
         }
       statement
@@ -656,7 +756,20 @@ for_init
     | type_specifier IDENTIFIER '=' expression
         {
             Sym *s = sym_decl($2, $1);
-            if (s) { emit_q("=", $4, "-", $2); sym_sv($2, $4); }
+            if (s) {
+                if (strcmp(s->type, "void") == 0)
+                    add_error("[Semantic Error] Line %d: void variable '%s' cannot be initialized", yylineno, $2);
+                else {
+                    const char *rt = type_of_place($4);
+                    if (strcmp(rt, "void") == 0)
+                        add_error("[Semantic Error] Line %d: void value used in initialization of '%s'", yylineno, $2);
+                    else {
+                        char *rhs = cast_place($4, rt, s->type);
+                        emit_q("=", rhs, "-", $2);
+                        sym_sv($2, rhs);
+                    }
+                }
+            }
             free($1); free($2); free($4);
         }
     | type_specifier IDENTIFIER
@@ -665,7 +778,15 @@ for_init
 
 for_cond
     : /* empty */   { $$ = -1; }
-    | expression    { $$ = emit_q("ifFalse", $1, "goto", "??"); free($1); }
+    | expression
+        {
+            const char *ct = type_of_place($1);
+            if (strcmp(ct, "void") == 0)
+                add_error("[Semantic Error] Line %d: void expression used in for-condition", yylineno);
+            char *cond = (strcmp(ct, "float") == 0) ? cast_place($1, "float", "int") : $1;
+            $$ = emit_q("ifFalse", cond, "goto", "??");
+            free($1);
+        }
     ;
 
 for_update
@@ -720,56 +841,116 @@ assignment_expression
 
     | IDENTIFIER '=' assignment_expression
         {
-            if (!sym_look($1))
+            Sym *s = sym_look($1);
+            if (!s)
                 add_error("[Semantic Error] Line %d: assignment to undeclared variable '%s'", yylineno, $1);
-            else { emit_q("=", $3, "-", $1); sym_sv($1, $3); }
+            else if (strcmp(s->type, "void") == 0)
+                add_error("[Semantic Error] Line %d: assignment to void variable '%s'", yylineno, $1);
+            else {
+                const char *rt = type_of_place($3);
+                if (strcmp(rt, "void") == 0)
+                    add_error("[Semantic Error] Line %d: void value assigned to '%s'", yylineno, $1);
+                else {
+                    char *rhs = cast_place($3, rt, s->type);
+                    emit_q("=", rhs, "-", $1);
+                    sym_sv($1, rhs);
+                }
+            }
             $$ = strdup($1); free($3);
         }
 
     | IDENTIFIER ADD_ASSIGN assignment_expression
         {
-            if (!sym_look($1))
+            Sym *s = sym_look($1);
+            if (!s)
                 add_error("[Semantic Error] Line %d: assignment to undeclared variable '%s'", yylineno, $1);
+            else if (strcmp(s->type, "void") == 0)
+                add_error("[Semantic Error] Line %d: assignment to void variable '%s'", yylineno, $1);
             else {
-                char *t = nt();
-                emit_q("+", $1, $3, t); emit_q("=", t, "-", $1);
-                sym_sv($1, t); free(t);
+                const char *lt = s->type;
+                const char *rt = type_of_place($3);
+                if (strcmp(rt, "void") == 0)
+                    add_error("[Semantic Error] Line %d: void value used in '+=' for '%s'", yylineno, $1);
+                const char *op_t = common_numeric_type(lt, rt);
+                char *l = (strcmp(lt, op_t) == 0) ? $1 : cast_place($1, lt, op_t);
+                char *r = (strcmp(rt, op_t) == 0) ? $3 : cast_place($3, rt, op_t);
+                char *t = nt_of_type(op_t);
+                emit_q("+", l, r, t);
+                char *asgn = (strcmp(op_t, lt) == 0) ? t : cast_place(t, op_t, lt);
+                emit_q("=", asgn, "-", $1);
+                sym_sv($1, asgn);
             }
             $$ = strdup($1); free($3);
         }
 
     | IDENTIFIER SUB_ASSIGN assignment_expression
         {
-            if (!sym_look($1))
+            Sym *s = sym_look($1);
+            if (!s)
                 add_error("[Semantic Error] Line %d: assignment to undeclared variable '%s'", yylineno, $1);
+            else if (strcmp(s->type, "void") == 0)
+                add_error("[Semantic Error] Line %d: assignment to void variable '%s'", yylineno, $1);
             else {
-                char *t = nt();
-                emit_q("-", $1, $3, t); emit_q("=", t, "-", $1);
-                sym_sv($1, t); free(t);
+                const char *lt = s->type;
+                const char *rt = type_of_place($3);
+                if (strcmp(rt, "void") == 0)
+                    add_error("[Semantic Error] Line %d: void value used in '-=' for '%s'", yylineno, $1);
+                const char *op_t = common_numeric_type(lt, rt);
+                char *l = (strcmp(lt, op_t) == 0) ? $1 : cast_place($1, lt, op_t);
+                char *r = (strcmp(rt, op_t) == 0) ? $3 : cast_place($3, rt, op_t);
+                char *t = nt_of_type(op_t);
+                emit_q("-", l, r, t);
+                char *asgn = (strcmp(op_t, lt) == 0) ? t : cast_place(t, op_t, lt);
+                emit_q("=", asgn, "-", $1);
+                sym_sv($1, asgn);
             }
             $$ = strdup($1); free($3);
         }
 
     | IDENTIFIER MUL_ASSIGN assignment_expression
         {
-            if (!sym_look($1))
+            Sym *s = sym_look($1);
+            if (!s)
                 add_error("[Semantic Error] Line %d: assignment to undeclared variable '%s'", yylineno, $1);
+            else if (strcmp(s->type, "void") == 0)
+                add_error("[Semantic Error] Line %d: assignment to void variable '%s'", yylineno, $1);
             else {
-                char *t = nt();
-                emit_q("*", $1, $3, t); emit_q("=", t, "-", $1);
-                sym_sv($1, t); free(t);
+                const char *lt = s->type;
+                const char *rt = type_of_place($3);
+                if (strcmp(rt, "void") == 0)
+                    add_error("[Semantic Error] Line %d: void value used in '*=' for '%s'", yylineno, $1);
+                const char *op_t = common_numeric_type(lt, rt);
+                char *l = (strcmp(lt, op_t) == 0) ? $1 : cast_place($1, lt, op_t);
+                char *r = (strcmp(rt, op_t) == 0) ? $3 : cast_place($3, rt, op_t);
+                char *t = nt_of_type(op_t);
+                emit_q("*", l, r, t);
+                char *asgn = (strcmp(op_t, lt) == 0) ? t : cast_place(t, op_t, lt);
+                emit_q("=", asgn, "-", $1);
+                sym_sv($1, asgn);
             }
             $$ = strdup($1); free($3);
         }
 
     | IDENTIFIER DIV_ASSIGN assignment_expression
         {
-            if (!sym_look($1))
+            Sym *s = sym_look($1);
+            if (!s)
                 add_error("[Semantic Error] Line %d: assignment to undeclared variable '%s'", yylineno, $1);
+            else if (strcmp(s->type, "void") == 0)
+                add_error("[Semantic Error] Line %d: assignment to void variable '%s'", yylineno, $1);
             else {
-                char *t = nt();
-                emit_q("/", $1, $3, t); emit_q("=", t, "-", $1);
-                sym_sv($1, t); free(t);
+                const char *lt = s->type;
+                const char *rt = type_of_place($3);
+                if (strcmp(rt, "void") == 0)
+                    add_error("[Semantic Error] Line %d: void value used in '/=' for '%s'", yylineno, $1);
+                const char *op_t = common_numeric_type(lt, rt);
+                char *l = (strcmp(lt, op_t) == 0) ? $1 : cast_place($1, lt, op_t);
+                char *r = (strcmp(rt, op_t) == 0) ? $3 : cast_place($3, rt, op_t);
+                char *t = nt_of_type(op_t);
+                emit_q("/", l, r, t);
+                char *asgn = (strcmp(op_t, lt) == 0) ? t : cast_place(t, op_t, lt);
+                emit_q("=", asgn, "-", $1);
+                sym_sv($1, asgn);
             }
             $$ = strdup($1); free($3);
         }
@@ -778,51 +959,193 @@ assignment_expression
 logical_or_expression
     : logical_and_expression { $$ = $1; }
     | logical_or_expression OR_OP logical_and_expression
-        { char *t=nt(); emit_q("||",$1,$3,t); free($1);free($3); $$=t; }
+        {
+            const char *t1 = type_of_place($1);
+            const char *t2 = type_of_place($3);
+            if (strcmp(t1, "void") == 0 || strcmp(t2, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in logical OR", yylineno);
+            char *l = (strcmp(t1, "float") == 0) ? cast_place($1, "float", "int") : $1;
+            char *r = (strcmp(t2, "float") == 0) ? cast_place($3, "float", "int") : $3;
+            char *t = nt_of_type("int");
+            emit_q("||", l, r, t);
+            free($1); free($3); $$ = t;
+        }
     ;
 
 logical_and_expression
     : equality_expression { $$ = $1; }
     | logical_and_expression AND_OP equality_expression
-        { char *t=nt(); emit_q("&&",$1,$3,t); free($1);free($3); $$=t; }
+        {
+            const char *t1 = type_of_place($1);
+            const char *t2 = type_of_place($3);
+            if (strcmp(t1, "void") == 0 || strcmp(t2, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in logical AND", yylineno);
+            char *l = (strcmp(t1, "float") == 0) ? cast_place($1, "float", "int") : $1;
+            char *r = (strcmp(t2, "float") == 0) ? cast_place($3, "float", "int") : $3;
+            char *t = nt_of_type("int");
+            emit_q("&&", l, r, t);
+            free($1); free($3); $$ = t;
+        }
     ;
 
 equality_expression
     : relational_expression { $$ = $1; }
     | equality_expression EQ_OP relational_expression
-        { char *t=nt(); emit_q("==",$1,$3,t); free($1);free($3); $$=t; }
+        {
+            const char *t1 = type_of_place($1);
+            const char *t2 = type_of_place($3);
+            if (strcmp(t1, "void") == 0 || strcmp(t2, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in '=='", yylineno);
+            const char *ct = common_numeric_type(t1, t2);
+            char *l = (strcmp(t1, ct) == 0) ? $1 : cast_place($1, t1, ct);
+            char *r = (strcmp(t2, ct) == 0) ? $3 : cast_place($3, t2, ct);
+            char *t = nt_of_type("int");
+            emit_q("==", l, r, t);
+            free($1); free($3); $$ = t;
+        }
     | equality_expression NE_OP relational_expression
-        { char *t=nt(); emit_q("!=",$1,$3,t); free($1);free($3); $$=t; }
+        {
+            const char *t1 = type_of_place($1);
+            const char *t2 = type_of_place($3);
+            if (strcmp(t1, "void") == 0 || strcmp(t2, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in '!='", yylineno);
+            const char *ct = common_numeric_type(t1, t2);
+            char *l = (strcmp(t1, ct) == 0) ? $1 : cast_place($1, t1, ct);
+            char *r = (strcmp(t2, ct) == 0) ? $3 : cast_place($3, t2, ct);
+            char *t = nt_of_type("int");
+            emit_q("!=", l, r, t);
+            free($1); free($3); $$ = t;
+        }
     ;
 
 relational_expression
     : additive_expression { $$ = $1; }
     | relational_expression '<' additive_expression
-        { char *t=nt(); emit_q("<", $1,$3,t); free($1);free($3); $$=t; }
+        {
+            const char *t1 = type_of_place($1);
+            const char *t2 = type_of_place($3);
+            if (strcmp(t1, "void") == 0 || strcmp(t2, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in '<'", yylineno);
+            const char *ct = common_numeric_type(t1, t2);
+            char *l = (strcmp(t1, ct) == 0) ? $1 : cast_place($1, t1, ct);
+            char *r = (strcmp(t2, ct) == 0) ? $3 : cast_place($3, t2, ct);
+            char *t = nt_of_type("int");
+            emit_q("<", l, r, t);
+            free($1); free($3); $$ = t;
+        }
     | relational_expression '>' additive_expression
-        { char *t=nt(); emit_q(">", $1,$3,t); free($1);free($3); $$=t; }
+        {
+            const char *t1 = type_of_place($1);
+            const char *t2 = type_of_place($3);
+            if (strcmp(t1, "void") == 0 || strcmp(t2, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in '>'", yylineno);
+            const char *ct = common_numeric_type(t1, t2);
+            char *l = (strcmp(t1, ct) == 0) ? $1 : cast_place($1, t1, ct);
+            char *r = (strcmp(t2, ct) == 0) ? $3 : cast_place($3, t2, ct);
+            char *t = nt_of_type("int");
+            emit_q(">", l, r, t);
+            free($1); free($3); $$ = t;
+        }
     | relational_expression LE_OP additive_expression
-        { char *t=nt(); emit_q("<=",$1,$3,t); free($1);free($3); $$=t; }
+        {
+            const char *t1 = type_of_place($1);
+            const char *t2 = type_of_place($3);
+            if (strcmp(t1, "void") == 0 || strcmp(t2, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in '<='", yylineno);
+            const char *ct = common_numeric_type(t1, t2);
+            char *l = (strcmp(t1, ct) == 0) ? $1 : cast_place($1, t1, ct);
+            char *r = (strcmp(t2, ct) == 0) ? $3 : cast_place($3, t2, ct);
+            char *t = nt_of_type("int");
+            emit_q("<=", l, r, t);
+            free($1); free($3); $$ = t;
+        }
     | relational_expression GE_OP additive_expression
-        { char *t=nt(); emit_q(">=",$1,$3,t); free($1);free($3); $$=t; }
+        {
+            const char *t1 = type_of_place($1);
+            const char *t2 = type_of_place($3);
+            if (strcmp(t1, "void") == 0 || strcmp(t2, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in '>='", yylineno);
+            const char *ct = common_numeric_type(t1, t2);
+            char *l = (strcmp(t1, ct) == 0) ? $1 : cast_place($1, t1, ct);
+            char *r = (strcmp(t2, ct) == 0) ? $3 : cast_place($3, t2, ct);
+            char *t = nt_of_type("int");
+            emit_q(">=", l, r, t);
+            free($1); free($3); $$ = t;
+        }
     ;
 
 additive_expression
     : multiplicative_expression { $$ = $1; }
     | additive_expression '+' multiplicative_expression
-        { char *t=nt(); emit_q("+",$1,$3,t); free($1);free($3); $$=t; }
+        {
+            const char *t1 = type_of_place($1);
+            const char *t2 = type_of_place($3);
+            if (strcmp(t1, "void") == 0 || strcmp(t2, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in '+'", yylineno);
+            const char *ct = common_numeric_type(t1, t2);
+            char *l = (strcmp(t1, ct) == 0) ? $1 : cast_place($1, t1, ct);
+            char *r = (strcmp(t2, ct) == 0) ? $3 : cast_place($3, t2, ct);
+            char *t = nt_of_type(ct);
+            emit_q("+", l, r, t);
+            free($1); free($3); $$ = t;
+        }
     | additive_expression '-' multiplicative_expression
-        { char *t=nt(); emit_q("-",$1,$3,t); free($1);free($3); $$=t; }
+        {
+            const char *t1 = type_of_place($1);
+            const char *t2 = type_of_place($3);
+            if (strcmp(t1, "void") == 0 || strcmp(t2, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in '-'", yylineno);
+            const char *ct = common_numeric_type(t1, t2);
+            char *l = (strcmp(t1, ct) == 0) ? $1 : cast_place($1, t1, ct);
+            char *r = (strcmp(t2, ct) == 0) ? $3 : cast_place($3, t2, ct);
+            char *t = nt_of_type(ct);
+            emit_q("-", l, r, t);
+            free($1); free($3); $$ = t;
+        }
     ;
 
 multiplicative_expression
     : unary_expression { $$ = $1; }
     | multiplicative_expression '*' unary_expression
-        { char *t=nt(); emit_q("*",$1,$3,t); free($1);free($3); $$=t; }
+        {
+            const char *t1 = type_of_place($1);
+            const char *t2 = type_of_place($3);
+            if (strcmp(t1, "void") == 0 || strcmp(t2, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in '*'", yylineno);
+            const char *ct = common_numeric_type(t1, t2);
+            char *l = (strcmp(t1, ct) == 0) ? $1 : cast_place($1, t1, ct);
+            char *r = (strcmp(t2, ct) == 0) ? $3 : cast_place($3, t2, ct);
+            char *t = nt_of_type(ct);
+            emit_q("*", l, r, t);
+            free($1); free($3); $$ = t;
+        }
     | multiplicative_expression '/' unary_expression
-        { char *t=nt(); emit_q("/",$1,$3,t); free($1);free($3); $$=t; }
+        {
+            const char *t1 = type_of_place($1);
+            const char *t2 = type_of_place($3);
+            if (strcmp(t1, "void") == 0 || strcmp(t2, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in '/'", yylineno);
+            const char *ct = common_numeric_type(t1, t2);
+            char *l = (strcmp(t1, ct) == 0) ? $1 : cast_place($1, t1, ct);
+            char *r = (strcmp(t2, ct) == 0) ? $3 : cast_place($3, t2, ct);
+            char *t = nt_of_type(ct);
+            emit_q("/", l, r, t);
+            free($1); free($3); $$ = t;
+        }
     | multiplicative_expression '%' unary_expression
-        { char *t=nt(); emit_q("%",$1,$3,t); free($1);free($3); $$=t; }
+        {
+            const char *t1 = type_of_place($1);
+            const char *t2 = type_of_place($3);
+            if (strcmp(t1, "void") == 0 || strcmp(t2, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in '%%'", yylineno);
+            if (strcmp(t1, "float") == 0 || strcmp(t2, "float") == 0)
+                add_error("[Semantic Error] Line %d: modulo requires int operands", yylineno);
+            char *l = (strcmp(t1, "int") == 0) ? $1 : cast_place($1, t1, "int");
+            char *r = (strcmp(t2, "int") == 0) ? $3 : cast_place($3, t2, "int");
+            char *t = nt_of_type("int");
+            emit_q("%", l, r, t);
+            free($1); free($3); $$ = t;
+        }
     ;
 
 /* ── Unary ──────────────────────────────────────────────
@@ -835,23 +1158,59 @@ multiplicative_expression
 unary_expression
     : postfix_expression { $$ = $1; }
     | '-' unary_expression
-        { char *t=nt(); emit_q("minus",$2,"-",t); free($2); $$=t; }
+        {
+            const char *t1 = type_of_place($2);
+            if (strcmp(t1, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in unary '-'", yylineno);
+            const char *rt = (strcmp(t1, "float") == 0) ? "float" : "int";
+            char *t = nt_of_type(rt);
+            emit_q("minus", $2, "-", t);
+            free($2); $$ = t;
+        }
     | '!' unary_expression
-        { char *t=nt(); emit_q("!",$2,"-",t); free($2); $$=t; }
+        {
+            const char *t1 = type_of_place($2);
+            if (strcmp(t1, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in unary '!'", yylineno);
+            char *opd = (strcmp(t1, "float") == 0) ? cast_place($2, "float", "int") : $2;
+            char *t = nt_of_type("int");
+            emit_q("!", opd, "-", t);
+            free($2); $$ = t;
+        }
     | '~' unary_expression
-        { char *t=nt(); emit_q("~",$2,"-",t); free($2); $$=t; }
+        {
+            const char *t1 = type_of_place($2);
+            if (strcmp(t1, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in unary '~'", yylineno);
+            if (strcmp(t1, "float") == 0)
+                add_error("[Semantic Error] Line %d: unary '~' requires int operand", yylineno);
+            char *opd = (strcmp(t1, "int") == 0) ? $2 : cast_place($2, t1, "int");
+            char *t = nt_of_type("int");
+            emit_q("~", opd, "-", t);
+            free($2); $$ = t;
+        }
     | INC_OP unary_expression
         {
-            char *t = nt();
-            emit_q("+", $2, "1", t);
+            const char *t1 = type_of_place($2);
+            if (strcmp(t1, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in '++'", yylineno);
+            const char *rt = (strcmp(t1, "float") == 0) ? "float" : "int";
+            const char *one = (strcmp(rt, "float") == 0) ? "1.0" : "1";
+            char *t = nt_of_type(rt);
+            emit_q("+", $2, one, t);
             emit_q("=", t, "-", $2);
             sym_mk($2);
             $$ = strdup($2); free(t);
         }
     | DEC_OP unary_expression
         {
-            char *t = nt();
-            emit_q("-", $2, "1", t);
+            const char *t1 = type_of_place($2);
+            if (strcmp(t1, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in '--'", yylineno);
+            const char *rt = (strcmp(t1, "float") == 0) ? "float" : "int";
+            const char *one = (strcmp(rt, "float") == 0) ? "1.0" : "1";
+            char *t = nt_of_type(rt);
+            emit_q("-", $2, one, t);
             emit_q("=", t, "-", $2);
             sym_mk($2);
             $$ = strdup($2); free(t);
@@ -866,18 +1225,28 @@ postfix_expression
     : primary_expression { $$ = $1; }
     | postfix_expression INC_OP
         {
-            char *t1 = nt(), *t2 = nt();
+            const char *t1t = type_of_place($1);
+            if (strcmp(t1t, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in postfix '++'", yylineno);
+            const char *rt = (strcmp(t1t, "float") == 0) ? "float" : "int";
+            const char *one = (strcmp(rt, "float") == 0) ? "1.0" : "1";
+            char *t1 = nt_of_type(rt), *t2 = nt_of_type(rt);
             emit_q("=", $1, "-", t1);
-            emit_q("+", $1, "1", t2);
+            emit_q("+", $1, one, t2);
             emit_q("=", t2, "-", $1);
             sym_mk($1); free(t2);
             $$ = t1;
         }
     | postfix_expression DEC_OP
         {
-            char *t1 = nt(), *t2 = nt();
+            const char *t1t = type_of_place($1);
+            if (strcmp(t1t, "void") == 0)
+                add_error("[Semantic Error] Line %d: void value used in postfix '--'", yylineno);
+            const char *rt = (strcmp(t1t, "float") == 0) ? "float" : "int";
+            const char *one = (strcmp(rt, "float") == 0) ? "1.0" : "1";
+            char *t1 = nt_of_type(rt), *t2 = nt_of_type(rt);
             emit_q("=", $1, "-", t1);
-            emit_q("-", $1, "1", t2);
+            emit_q("-", $1, one, t2);
             emit_q("=", t2, "-", $1);
             sym_mk($1); free(t2);
             $$ = t1;
@@ -887,8 +1256,11 @@ postfix_expression
 primary_expression
     : IDENTIFIER
         {
-            if (!sym_look($1))
+            Sym *s = sym_look($1);
+            if (!s)
                 add_error("[Semantic Error] Line %d: use of undeclared variable '%s'", yylineno, $1);
+            else if (strcmp(s->type, "void") == 0)
+                add_error("[Semantic Error] Line %d: void variable '%s' used in expression", yylineno, $1);
             $$ = $1;
         }
     | I_CONSTANT  { $$ = $1; }

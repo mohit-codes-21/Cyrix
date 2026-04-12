@@ -46,8 +46,6 @@ static void comment(void);
 "for"       { return FOR; }
 "int"       { return INT; }
 "float"     { return FLOAT; }
-"char"      { return CHAR; }
-"double"    { return DOUBLE; }
 "void"      { return VOID; }
 "return"    { return RETURN; }
 "break"     { return BREAK; }
