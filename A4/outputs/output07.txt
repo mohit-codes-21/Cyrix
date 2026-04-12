@@ -61,7 +61,7 @@
   |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   |>marks            | int     |   0   | line 2      | active       | yes     | 82           |
-  |>grade            | int     |   0   | line 3      | active       | yes     | 10           |
+  |>grade            | int     |   0   | line 3      | active       | yes     | ?            |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   (> = currently in scope)
 
@@ -70,7 +70,7 @@
   |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   |>marks            | int     |   0   | line 2      | active       | yes     | 82           |
-  |>grade            | int     |   0   | line 3      | active       | yes     | 9            |
+  |>grade            | int     |   0   | line 3      | active       | yes     | ?            |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   (> = currently in scope)
 
@@ -79,7 +79,7 @@
   |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   |>marks            | int     |   0   | line 2      | active       | yes     | 82           |
-  |>grade            | int     |   0   | line 3      | active       | yes     | 8            |
+  |>grade            | int     |   0   | line 3      | active       | yes     | ?            |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   (> = currently in scope)
 
@@ -88,7 +88,7 @@
   |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   |>marks            | int     |   0   | line 2      | active       | yes     | 82           |
-  |>grade            | int     |   0   | line 3      | active       | yes     | 7            |
+  |>grade            | int     |   0   | line 3      | active       | yes     | ?            |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   (> = currently in scope)
 
@@ -125,5 +125,5 @@
 |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     | Active? |
 +==================+=========+=======+=============+==============+=========+==============+=========+
 | marks            | int     |   0   | line 2      | end-of-prog  | yes     | 82           | active  |
-| grade            | int     |   0   | line 3      | end-of-prog  | yes     | 7            | active  |
+| grade            | int     |   0   | line 3      | end-of-prog  | yes     | ?            | active  |
 +------------------+---------+-------+-------------+--------------+---------+--------------+---------+

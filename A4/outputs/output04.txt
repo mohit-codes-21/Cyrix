@@ -57,7 +57,7 @@
   |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   |>score            | int     |   0   | line 2      | active       | yes     | 75           |
-  |>grade            | int     |   0   | line 3      | active       | yes     | 1            |
+  |>grade            | int     |   0   | line 3      | active       | yes     | ?            |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   (> = currently in scope)
 
@@ -66,7 +66,7 @@
   |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   |>score            | int     |   0   | line 2      | active       | yes     | 75           |
-  |>grade            | int     |   0   | line 3      | active       | yes     | 0            |
+  |>grade            | int     |   0   | line 3      | active       | yes     | ?            |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   (> = currently in scope)
 
@@ -91,5 +91,5 @@
 |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     | Active? |
 +==================+=========+=======+=============+==============+=========+==============+=========+
 | score            | int     |   0   | line 2      | end-of-prog  | yes     | 75           | active  |
-| grade            | int     |   0   | line 3      | end-of-prog  | yes     | 0            | active  |
+| grade            | int     |   0   | line 3      | end-of-prog  | yes     | ?            | active  |
 +------------------+---------+-------+-------------+--------------+---------+--------------+---------+

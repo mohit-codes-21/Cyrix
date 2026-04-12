@@ -176,16 +176,27 @@ static Sym *sym_look(const char *nm)
     return NULL;
 }
 
+static int value_guard_depth = 0;
+static void value_guard_push(void) { value_guard_depth++; }
+static void value_guard_pop(void)  { if (value_guard_depth > 0) value_guard_depth--; }
+
 static void sym_sv(const char *nm, const char *v)
 {
     Sym *s = sym_look(nm);
-    if (s) { s->init = 1; snprintf(s->value, 64, "%s", v); }
+    if (s) {
+        s->init = 1;
+        if (value_guard_depth > 0) snprintf(s->value, 64, "?");
+        else snprintf(s->value, 64, "%s", v);
+    }
 }
 
 static void sym_mk(const char *nm)
 {
     Sym *s = sym_look(nm);
-    if (s) s->init = 1;
+    if (s) {
+        s->init = 1;
+        if (value_guard_depth > 0) snprintf(s->value, 64, "?");
+    }
 }
 
 static int is_float_literal(const char *s)
@@ -597,6 +608,7 @@ if_prefix
                 add_error("[Semantic Error] Line %d: void expression used in if-condition", yylineno);
             char *cond = (strcmp(ct, "float") == 0) ? cast_place($3, "float", "int") : $3;
             $$ = emit_q("ifFalse", cond, "goto", "??");
+            value_guard_push();
             free($3);
         }
     ;
@@ -605,6 +617,7 @@ selection_statement
     /* ── if (C) S ── */
     : if_prefix statement %prec LOWER_THAN_ELSE
         {
+            value_guard_pop();
             /* $1 = ifFalse quad index */
             char *lf = nl();
             bp_res($1, lf);                    /* ifFalse ... goto Lf */
@@ -613,7 +626,7 @@ selection_statement
         }
 
     /* ── if (C) S else S1 ── */
-    | if_prefix statement ELSE
+        | if_prefix statement ELSE
         {
             /* Emit goto past else body; push its index onto the if-goto
                stack so nested if-else rules can't clobber it.
@@ -624,8 +637,9 @@ selection_statement
             emit_q("label", lf, "-", "-");
             free(lf);
         }
-      statement
+            statement
         {
+                        value_guard_pop();
             /* Pop our goto index — guaranteed to be ours even if the
                else-body contained nested if-else statements. */
             char *lend = nl();
@@ -689,8 +703,9 @@ iteration_statement
             $<ival>$ = emit_q("ifFalse", cond, "goto", "??");
             free($4);
         }
-      statement
+            { value_guard_push(); } statement
         {
+                        value_guard_pop();
             char *ls  = $<sval>3;
             int   ifi = $<ival>6;
             emit_q("goto", ls, "-", "-");
@@ -723,7 +738,7 @@ iteration_statement
             brk_enter();
             $<sval>$ = lu;
         }
-        for_update ')'
+        { value_guard_push(); } for_update ')'
         {
             /* after update: goto Ltest; emit Lbody               */
             char *lt = $<sval>5;
@@ -736,6 +751,7 @@ iteration_statement
         }
         statement
         {
+            value_guard_pop();
             /* close the loop */
             char *lu   = $<sval>8;
             char *lb   = $<sval>10;

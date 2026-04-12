@@ -386,7 +386,7 @@ Each row has six columns: \texttt{No} (sequence number), \texttt{expr} (human-re
 
 \subsection{Symbol Table Format}
 
-The symbol table is printed after every statement, showing scope depth, declaration line, live-until (either ``active'' or the closing line number), initialisation status, and the last known value.
+The symbol table is printed after every statement, showing scope depth, declaration line, live-until (either ``active'' or the closing line number), initialisation status, and the last known value. The value \texttt{?} means ``unknown'' (used when a value is control-flow dependent or not yet assigned).
 
 \begin{lstlisting}[style=outputstyle, basicstyle=\ttfamily\scriptsize, columns=fixed, keepspaces=true, basewidth=0.5em]
     +------------------+---------+-------+-------------+--------------+---------+--------------+
@@ -481,6 +481,7 @@ typedef struct {
     \item \textbf{Lookup is innermost-scope-first}: the table is scanned from newest to oldest, so inner declarations shadow outer ones of the same name.
     \item \textbf{Redeclaration} within the \emph{same} scope at the \emph{same} depth is an error. Redeclaration in an \emph{inner} scope (shadowing) is legal and correctly handled.
     \item \textbf{Value tracking}: after a constant assignment (\texttt{x = 5}), the value \texttt{5} is recorded in the symbol table. After an expression assignment (\texttt{x = t3}), the temp name is recorded. This gives the evaluator visibility into what each variable currently holds.
+    \item \textbf{Conservative unknowns inside control flow}: assignments inside \texttt{if/else} blocks or loops mark the value as \texttt{?} because the assignment may or may not execute along all paths. This keeps the symbol table consistent without changing the IR.
 \end{itemize}
 
 % ════════════════════════════════════════════════════════════════════════

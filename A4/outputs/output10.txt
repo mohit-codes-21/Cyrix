@@ -102,8 +102,8 @@
   |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   |>n                | int     |   0   | line 2      | active       | yes     | 4            |
-  |>i                | int     |   0   | line 3      | active       | yes     | t2           |
-  |>j                | int     |   0   | line 4      | active       | yes     | 1            |
+  |>i                | int     |   0   | line 3      | active       | yes     | ?            |
+  |>j                | int     |   0   | line 4      | active       | yes     | ?            |
   |>total            | int     |   0   | line 5      | active       | yes     | 0            |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   (> = currently in scope)
@@ -113,9 +113,9 @@
   |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   |>n                | int     |   0   | line 2      | active       | yes     | 4            |
-  |>i                | int     |   0   | line 3      | active       | yes     | t2           |
-  |>j                | int     |   0   | line 4      | active       | yes     | 1            |
-  |>total            | int     |   0   | line 5      | active       | yes     | t8           |
+  |>i                | int     |   0   | line 3      | active       | yes     | ?            |
+  |>j                | int     |   0   | line 4      | active       | yes     | ?            |
+  |>total            | int     |   0   | line 5      | active       | yes     | ?            |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   (> = currently in scope)
 
@@ -124,9 +124,9 @@
   |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   |>n                | int     |   0   | line 2      | active       | yes     | 4            |
-  |>i                | int     |   0   | line 3      | active       | yes     | t2           |
-  |>j                | int     |   0   | line 4      | active       | yes     | t9           |
-  |>total            | int     |   0   | line 5      | active       | yes     | t8           |
+  |>i                | int     |   0   | line 3      | active       | yes     | ?            |
+  |>j                | int     |   0   | line 4      | active       | yes     | ?            |
+  |>total            | int     |   0   | line 5      | active       | yes     | ?            |
   +------------------+---------+-------+-------------+--------------+---------+--------------+
   (> = currently in scope)
 
@@ -173,7 +173,7 @@
 |      Name        |  Type   | Scope | Decl Line   |  Live Until  |  Init?  |    Value     | Active? |
 +==================+=========+=======+=============+==============+=========+==============+=========+
 | n                | int     |   0   | line 2      | end-of-prog  | yes     | 4            | active  |
-| i                | int     |   0   | line 3      | end-of-prog  | yes     | t2           | active  |
-| j                | int     |   0   | line 4      | end-of-prog  | yes     | t9           | active  |
-| total            | int     |   0   | line 5      | end-of-prog  | yes     | t8           | active  |
+| i                | int     |   0   | line 3      | end-of-prog  | yes     | ?            | active  |
+| j                | int     |   0   | line 4      | end-of-prog  | yes     | ?            | active  |
+| total            | int     |   0   | line 5      | end-of-prog  | yes     | ?            | active  |
 +------------------+---------+-------+-------------+--------------+---------+--------------+---------+
