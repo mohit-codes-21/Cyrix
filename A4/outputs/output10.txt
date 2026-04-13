@@ -177,3 +177,9 @@
 | j                | int     |   0   | line 4      | end-of-prog  | yes     | ?            | active  |
 | total            | int     |   0   | line 5      | end-of-prog  | yes     | ?            | active  |
 +------------------+---------+-------+-------------+--------------+---------+--------------+---------+
+
+----- FINAL VARIABLE DUMP -----
+n = 4
+i = 5
+j = 5
+total = 35

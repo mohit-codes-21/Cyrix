@@ -100,3 +100,7 @@
 | i                | int     |   0   | line 2      | end-of-prog  | yes     | ?            | active  |
 | sum              | int     |   0   | line 3      | end-of-prog  | yes     | ?            | active  |
 +------------------+---------+-------+-------------+--------------+---------+--------------+---------+
+
+----- FINAL VARIABLE DUMP -----
+i = 5
+sum = 10

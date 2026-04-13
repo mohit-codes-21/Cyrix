@@ -115,3 +115,8 @@
 | n                | int     |   0   | line 3      | end-of-prog  | yes     | 5            | active  |
 | i                | int     |   0   | line 4      | end-of-prog  | yes     | ?            | active  |
 +------------------+---------+-------+-------------+--------------+---------+--------------+---------+
+
+----- FINAL VARIABLE DUMP -----
+fact = 120
+n = 5
+i = 6

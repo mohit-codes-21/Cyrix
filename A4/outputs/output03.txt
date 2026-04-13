@@ -116,3 +116,8 @@
 | b                | int     |   0   | line 3      | end-of-prog  | yes     | 20           | active  |
 | max              | int     |   0   | line 4      | end-of-prog  | yes     | ?            | active  |
 +------------------+---------+-------+-------------+--------------+---------+--------------+---------+
+
+----- FINAL VARIABLE DUMP -----
+a = 10
+b = 20
+max = 20

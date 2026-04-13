@@ -8,23 +8,20 @@ This folder contains Lab Assignment 4 for the CS327 Compilers course. The goal i
 make
 ```
 
-## Run a Single Test
+## Test and Codegen Targets
 
-```sh
-make run FILE=tests/test01.c
-```
+- `make tests` — run all 16 test cases and write IR output to `outputs/outputNN.txt`.
+- `make tests-asm` — generate assembly + executables for tests that compile cleanly; still writes IR output for all tests.
+- `make tests-run` — run the generated executables and append the final variable dump to each `outputs/outputNN.txt`.
 
-## Run All Tests
+## Assembly Code Generation (WSL)
 
-```sh
-make tests
-```
+Assembly generation and execution are supported when running in WSL with GCC (Linux toolchain). The backend emits x86-64 (AMD64) assembly using the System V ABI. These targets are not intended for native Windows shells.These targets are intended for WSL only and use GCC in the Linux toolchain.
 
 ## Clean
 
-```sh
-make clean
-```
+- `make clean` — remove build artifacts and generated `.s/.exe` files.
+- `make cleanall` — remove build artifacts, generated files, and `outputs/output*.txt`.
 
 ## Notes
 

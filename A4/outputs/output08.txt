@@ -177,3 +177,8 @@
 | z                | int     |   2   | line 8      | line 10      | yes     | t2           | gone    |
 | result           | int     |   0   | line 12     | end-of-prog  | yes     | t4           | active  |
 +------------------+---------+-------+-------------+--------------+---------+--------------+---------+
+
+----- FINAL VARIABLE DUMP -----
+x = 1
+y = 302
+result = 303

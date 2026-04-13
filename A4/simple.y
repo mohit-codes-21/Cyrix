@@ -176,6 +176,14 @@ static Sym *sym_look(const char *nm)
     return NULL;
 }
 
+static Sym *sym_look_any(const char *nm)
+{
+    for (int i = sn-1; i >= 0; i--)
+        if (strcmp(ST[i].name, nm) == 0)
+            return &ST[i];
+    return NULL;
+}
+
 static int value_guard_depth = 0;
 static void value_guard_push(void) { value_guard_depth++; }
 static void value_guard_pop(void)  { if (value_guard_depth > 0) value_guard_depth--; }
@@ -428,6 +436,473 @@ static void print_summary(void)
                s->active ? "active" : "gone");
     }
     printf("+------------------+---------+-------+-------------+--------------+---------+--------------+---------+\n");
+}
+
+/* ═══════════════════════════════════════════════════════
+   ASM CODEGEN (x86-64, Windows GCC / MinGW-w64)
+   ─ Uses MS x64 calling convention
+   ─ Floats are treated as double for printf
+   ═══════════════════════════════════════════════════════ */
+#define MAX_FLOAT_LIT 2048
+#define MAX_SLOTS     (MAX_S + 8192)
+
+typedef struct {
+    char name[64];
+    char type[16];
+    int  offset;     /* negative rbp offset */
+    int  is_temp;
+    int  sym_index;  /* index in ST for variables, -1 for temps */
+} Slot;
+
+typedef struct {
+    int  sym_index;
+    char fmt_init[32];
+    char fmt_uninit[32];
+} PrintSym;
+
+static Slot     slots[MAX_SLOTS];
+static int      slot_cnt = 0;
+static PrintSym print_syms[MAX_S];
+static int      print_cnt = 0;
+
+static double   flit_vals[MAX_FLOAT_LIT];
+static char     flit_lbls[MAX_FLOAT_LIT][16];
+static int      flit_cnt = 0;
+
+static int slot_index(const char *name)
+{
+    for (int i = slot_cnt - 1; i >= 0; i--)
+        if (strcmp(slots[i].name, name) == 0) return i;
+    return -1;
+}
+
+static int slot_index_for_sym(int sym_index)
+{
+    for (int i = 0; i < slot_cnt; i++)
+        if (slots[i].sym_index == sym_index) return i;
+    return -1;
+}
+
+static int sym_at_line(const char *nm, int line)
+{
+    for (int i = sn - 1; i >= 0; i--) {
+        if (strcmp(ST[i].name, nm) != 0) continue;
+        if (ST[i].decl > line) continue;
+        if (ST[i].end != -1 && ST[i].end < line) continue;
+        return i;
+    }
+    return -1;
+}
+
+static int is_place(const char *p)
+{
+    if (!p) return 0;
+    if (sym_look_any(p)) return 1;
+    if (get_temp_type(p)) return 1;
+    return 0;
+}
+
+static int is_float_place(const char *p)
+{
+    if (!p) return 0;
+    const char *t = get_temp_type(p);
+    if (t) return strcmp(t, "float") == 0;
+    Sym *s = sym_look_any(p);
+    if (s) return strcmp(s->type, "float") == 0;
+    return is_float_literal(p);
+}
+
+static const char *float_label_for(const char *lit)
+{
+    if (!lit) return NULL;
+    if (flit_cnt >= MAX_FLOAT_LIT) return NULL;
+    double v = strtod(lit, NULL);
+    snprintf(flit_lbls[flit_cnt], sizeof flit_lbls[flit_cnt], "LCF%d", flit_cnt);
+    flit_vals[flit_cnt] = v;
+    return flit_lbls[flit_cnt++];
+}
+
+static void build_slots(void)
+{
+    slot_cnt = 0;
+
+    for (int i = 0; i < sn; i++) {
+        if (slot_cnt >= MAX_SLOTS) break;
+        snprintf(slots[slot_cnt].name, 64, "%s", ST[i].name);
+        snprintf(slots[slot_cnt].type, 16, "%s", ST[i].type);
+        slots[slot_cnt].is_temp = 0;
+        slots[slot_cnt].sym_index = i;
+        slot_cnt++;
+    }
+
+    for (int i = 1; i <= tc; i++) {
+        if (!temp_types[i]) continue;
+        if (slot_cnt >= MAX_SLOTS) break;
+        snprintf(slots[slot_cnt].name, 64, "t%d", i);
+        snprintf(slots[slot_cnt].type, 16, "%s", temp_types[i]);
+        slots[slot_cnt].is_temp = 1;
+        slots[slot_cnt].sym_index = -1;
+        slot_cnt++;
+    }
+
+    for (int i = 0; i < slot_cnt; i++)
+        slots[i].offset = -8 * (i + 1); /* 8-byte slots for alignment */
+}
+
+static int frame_size_bytes(void)
+{
+    int locals = slot_cnt * 8;
+#ifdef _WIN32
+    int total = locals + 32; /* shadow space */
+    int rem = total % 16;
+    if (rem) total += (16 - rem);
+    return total;
+#else
+    int rem = locals % 16;
+    if (rem) locals += (16 - rem);
+    return locals;
+#endif
+}
+
+static void build_print_list(void)
+{
+    print_cnt = 0;
+    for (int i = 0; i < sn; i++) {
+        if (!ST[i].active) continue; /* only final live variables */
+        snprintf(print_syms[print_cnt].fmt_init, sizeof print_syms[print_cnt].fmt_init, "LFMT%d", print_cnt * 2);
+        snprintf(print_syms[print_cnt].fmt_uninit, sizeof print_syms[print_cnt].fmt_uninit, "LFMT%d", print_cnt * 2 + 1);
+        print_syms[print_cnt].sym_index = i;
+        print_cnt++;
+    }
+}
+
+static void emit_load_int(FILE *out, const char *p, int line, const char *reg)
+{
+    if (!p) return;
+    if (!is_place(p)) {
+        long v = strtol(p, NULL, 0);
+        fprintf(out, "    movl $%ld, %s\n", v, reg);
+        return;
+    }
+    int idx = -1;
+    int si = sym_at_line(p, line);
+    if (si >= 0) idx = slot_index_for_sym(si);
+    if (idx < 0) idx = slot_index(p);
+    if (idx >= 0) fprintf(out, "    movl %d(%%rbp), %s\n", slots[idx].offset, reg);
+}
+
+static void emit_load_double(FILE *out, const char *p, int line, const char *xmm)
+{
+    if (!p) return;
+    if (!is_place(p)) {
+        const char *lbl = float_label_for(p);
+        if (lbl) fprintf(out, "    movsd %s(%%rip), %s\n", lbl, xmm);
+        return;
+    }
+    int idx = -1;
+    int si = sym_at_line(p, line);
+    if (si >= 0) idx = slot_index_for_sym(si);
+    if (idx < 0) idx = slot_index(p);
+    if (idx >= 0) fprintf(out, "    movsd %d(%%rbp), %s\n", slots[idx].offset, xmm);
+}
+
+static void emit_store_int(FILE *out, const char *p, int line, const char *reg)
+{
+    int idx = -1;
+    int si = sym_at_line(p, line);
+    if (si >= 0) idx = slot_index_for_sym(si);
+    if (idx < 0) idx = slot_index(p);
+    if (idx >= 0) fprintf(out, "    movl %s, %d(%%rbp)\n", reg, slots[idx].offset);
+}
+
+static void emit_store_double(FILE *out, const char *p, int line, const char *xmm)
+{
+    int idx = -1;
+    int si = sym_at_line(p, line);
+    if (si >= 0) idx = slot_index_for_sym(si);
+    if (idx < 0) idx = slot_index(p);
+    if (idx >= 0) fprintf(out, "    movsd %s, %d(%%rbp)\n", xmm, slots[idx].offset);
+}
+
+static void emit_cmp_setcc(FILE *out, const char *cc)
+{
+    fprintf(out, "    %s %%al\n", cc);
+    fprintf(out, "    movzbl %%al, %%eax\n");
+}
+
+static void emit_quad(FILE *out, const Quad *q, const char *l_done)
+{
+    const char *op = q->op;
+    int line = q->line;
+
+    if (strcmp(op, "label") == 0) {
+        fprintf(out, "%s:\n", q->arg1);
+        return;
+    }
+    if (strcmp(op, "goto") == 0) {
+        fprintf(out, "    jmp %s\n", q->arg1);
+        return;
+    }
+    if (strcmp(op, "ifFalse") == 0) {
+        emit_load_int(out, q->arg1, line, "%eax");
+        fprintf(out, "    cmpl $0, %%eax\n");
+        fprintf(out, "    je %s\n", q->result);
+        return;
+    }
+    if (strcmp(op, "return") == 0) {
+        if (strcmp(q->arg1, "-") != 0) {
+            if (is_float_place(q->arg1)) {
+                emit_load_double(out, q->arg1, line, "%xmm0");
+                fprintf(out, "    cvttsd2si %%xmm0, %%eax\n");
+            } else {
+                emit_load_int(out, q->arg1, line, "%eax");
+            }
+        } else {
+            fprintf(out, "    xorl %%eax, %%eax\n");
+        }
+        fprintf(out, "    jmp %s\n", l_done);
+        return;
+    }
+
+    if (strcmp(op, "=") == 0) {
+        if (is_float_place(q->result)) {
+            emit_load_double(out, q->arg1, line, "%xmm0");
+            emit_store_double(out, q->result, line, "%xmm0");
+        } else {
+            emit_load_int(out, q->arg1, line, "%eax");
+            emit_store_int(out, q->result, line, "%eax");
+        }
+        return;
+    }
+
+    if (strcmp(op, "itof") == 0) {
+        emit_load_int(out, q->arg1, line, "%eax");
+        fprintf(out, "    cvtsi2sd %%eax, %%xmm0\n");
+        emit_store_double(out, q->result, line, "%xmm0");
+        return;
+    }
+    if (strcmp(op, "ftoi") == 0) {
+        emit_load_double(out, q->arg1, line, "%xmm0");
+        fprintf(out, "    cvttsd2si %%xmm0, %%eax\n");
+        emit_store_int(out, q->result, line, "%eax");
+        return;
+    }
+
+    if (strcmp(op, "minus") == 0) {
+        if (is_float_place(q->result)) {
+            emit_load_double(out, q->arg1, line, "%xmm0");
+            fprintf(out, "    xorpd neg_mask(%%rip), %%xmm0\n");
+            emit_store_double(out, q->result, line, "%xmm0");
+        } else {
+            emit_load_int(out, q->arg1, line, "%eax");
+            fprintf(out, "    negl %%eax\n");
+            emit_store_int(out, q->result, line, "%eax");
+        }
+        return;
+    }
+    if (strcmp(op, "!") == 0) {
+        emit_load_int(out, q->arg1, line, "%eax");
+        fprintf(out, "    cmpl $0, %%eax\n");
+        emit_cmp_setcc(out, "sete");
+        emit_store_int(out, q->result, line, "%eax");
+        return;
+    }
+    if (strcmp(op, "~") == 0) {
+        emit_load_int(out, q->arg1, line, "%eax");
+        fprintf(out, "    notl %%eax\n");
+        emit_store_int(out, q->result, line, "%eax");
+        return;
+    }
+
+    if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0 ||
+        strcmp(op, "*") == 0 || strcmp(op, "/") == 0 ||
+        strcmp(op, "%") == 0) {
+
+        int is_f = is_float_place(q->result);
+        if (is_f) {
+            emit_load_double(out, q->arg1, line, "%xmm0");
+            emit_load_double(out, q->arg2, line, "%xmm1");
+            if (strcmp(op, "+") == 0) fprintf(out, "    addsd %%xmm1, %%xmm0\n");
+            if (strcmp(op, "-") == 0) fprintf(out, "    subsd %%xmm1, %%xmm0\n");
+            if (strcmp(op, "*") == 0) fprintf(out, "    mulsd %%xmm1, %%xmm0\n");
+            if (strcmp(op, "/") == 0) fprintf(out, "    divsd %%xmm1, %%xmm0\n");
+            emit_store_double(out, q->result, line, "%xmm0");
+        } else {
+            if (strcmp(op, "%") == 0 || strcmp(op, "/") == 0) {
+                emit_load_int(out, q->arg1, line, "%eax");
+                emit_load_int(out, q->arg2, line, "%ecx");
+                fprintf(out, "    cltd\n");
+                fprintf(out, "    idivl %%ecx\n");
+                if (strcmp(op, "/") == 0) emit_store_int(out, q->result, line, "%eax");
+                else emit_store_int(out, q->result, line, "%edx");
+            } else {
+                emit_load_int(out, q->arg1, line, "%eax");
+                emit_load_int(out, q->arg2, line, "%edx");
+                if (strcmp(op, "+") == 0) fprintf(out, "    addl %%edx, %%eax\n");
+                if (strcmp(op, "-") == 0) fprintf(out, "    subl %%edx, %%eax\n");
+                if (strcmp(op, "*") == 0) fprintf(out, "    imull %%edx, %%eax\n");
+                emit_store_int(out, q->result, line, "%eax");
+            }
+        }
+        return;
+    }
+
+    if (strcmp(op, "<") == 0 || strcmp(op, ">") == 0 ||
+        strcmp(op, "<=") == 0 || strcmp(op, ">=") == 0 ||
+        strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) {
+
+        int is_f = is_float_place(q->arg1) || is_float_place(q->arg2);
+        if (is_f) {
+            emit_load_double(out, q->arg1, line, "%xmm0");
+            emit_load_double(out, q->arg2, line, "%xmm1");
+            fprintf(out, "    ucomisd %%xmm1, %%xmm0\n");
+            if (strcmp(op, "<") == 0)  emit_cmp_setcc(out, "setb");
+            if (strcmp(op, ">") == 0)  emit_cmp_setcc(out, "seta");
+            if (strcmp(op, "<=") == 0) emit_cmp_setcc(out, "setbe");
+            if (strcmp(op, ">=") == 0) emit_cmp_setcc(out, "setae");
+            if (strcmp(op, "==") == 0) emit_cmp_setcc(out, "sete");
+            if (strcmp(op, "!=") == 0) emit_cmp_setcc(out, "setne");
+        } else {
+            emit_load_int(out, q->arg1, line, "%eax");
+            if (!is_place(q->arg2)) {
+                long v = strtol(q->arg2, NULL, 0);
+                fprintf(out, "    cmpl $%ld, %%eax\n", v);
+            } else {
+                emit_load_int(out, q->arg2, line, "%edx");
+                fprintf(out, "    cmpl %%edx, %%eax\n");
+            }
+            if (strcmp(op, "<") == 0)  emit_cmp_setcc(out, "setl");
+            if (strcmp(op, ">") == 0)  emit_cmp_setcc(out, "setg");
+            if (strcmp(op, "<=") == 0) emit_cmp_setcc(out, "setle");
+            if (strcmp(op, ">=") == 0) emit_cmp_setcc(out, "setge");
+            if (strcmp(op, "==") == 0) emit_cmp_setcc(out, "sete");
+            if (strcmp(op, "!=") == 0) emit_cmp_setcc(out, "setne");
+        }
+        emit_store_int(out, q->result, line, "%eax");
+        return;
+    }
+
+    if (strcmp(op, "&&") == 0 || strcmp(op, "||") == 0) {
+        emit_load_int(out, q->arg1, line, "%eax");
+        fprintf(out, "    cmpl $0, %%eax\n");
+        emit_cmp_setcc(out, "setne");
+        fprintf(out, "    movl %%eax, %%edx\n");
+        emit_load_int(out, q->arg2, line, "%eax");
+        fprintf(out, "    cmpl $0, %%eax\n");
+        emit_cmp_setcc(out, "setne");
+        if (strcmp(op, "&&") == 0) fprintf(out, "    andl %%edx, %%eax\n");
+        if (strcmp(op, "||") == 0) fprintf(out, "    orl %%edx, %%eax\n");
+        emit_store_int(out, q->result, line, "%eax");
+        return;
+    }
+}
+
+static void emit_dump(FILE *out)
+{
+    if (print_cnt <= 0) return;
+#ifdef _WIN32
+    fprintf(out, "    leaq LFMTHDR(%%rip), %%rcx\n");
+    fprintf(out, "    call printf\n");
+#else
+    fprintf(out, "    leaq LFMTHDR(%%rip), %%rdi\n");
+    fprintf(out, "    xorl %%eax, %%eax\n");
+    fprintf(out, "    call printf\n");
+#endif
+
+    for (int i = 0; i < print_cnt; i++) {
+        int si = print_syms[i].sym_index;
+        const char *fmt = ST[si].init ? print_syms[i].fmt_init : print_syms[i].fmt_uninit;
+        int idx = slot_index_for_sym(si);
+        if (idx < 0) continue;
+
+#ifdef _WIN32
+        fprintf(out, "    leaq %s(%%rip), %%rcx\n", fmt);
+        if (strcmp(ST[si].type, "float") == 0) {
+            fprintf(out, "    movsd %d(%%rbp), %%xmm1\n", slots[idx].offset);
+        } else {
+            fprintf(out, "    movl %d(%%rbp), %%edx\n", slots[idx].offset);
+        }
+        fprintf(out, "    call printf\n");
+#else
+        fprintf(out, "    leaq %s(%%rip), %%rdi\n", fmt);
+        if (strcmp(ST[si].type, "float") == 0) {
+            fprintf(out, "    movsd %d(%%rbp), %%xmm0\n", slots[idx].offset);
+            fprintf(out, "    movl $1, %%eax\n");
+        } else {
+            fprintf(out, "    movl %d(%%rbp), %%esi\n", slots[idx].offset);
+            fprintf(out, "    xorl %%eax, %%eax\n");
+        }
+        fprintf(out, "    call printf\n");
+#endif
+    }
+}
+
+static void generate_asm(const char *src_path)
+{
+    if (!src_path) return;
+
+    char out_path[1024];
+    snprintf(out_path, sizeof out_path, "%s", src_path);
+    char *dot = strrchr(out_path, '.');
+    if (dot) *dot = '\0';
+    strncat(out_path, ".s", sizeof out_path - strlen(out_path) - 1);
+
+    FILE *out = fopen(out_path, "w");
+    if (!out) return;
+
+    build_slots();
+    build_print_list();
+    flit_cnt = 0;
+
+    fprintf(out, "    .section .rodata\n");
+    fprintf(out, "neg_mask: .quad 0x8000000000000000\n");
+    fprintf(out, "LFMTHDR: .asciz \"\n----- FINAL VARIABLE DUMP -----\\n\"\n");
+
+    for (int i = 0; i < print_cnt; i++) {
+        int si = print_syms[i].sym_index;
+        if (strcmp(ST[si].type, "float") == 0) {
+            fprintf(out, "%s: .asciz \"%s = %%f\\n\"\n", print_syms[i].fmt_init, ST[si].name);
+            fprintf(out, "%s: .asciz \"%s = %%f (uninitialized)\\n\"\n", print_syms[i].fmt_uninit, ST[si].name);
+        } else {
+            fprintf(out, "%s: .asciz \"%s = %%d\\n\"\n", print_syms[i].fmt_init, ST[si].name);
+            fprintf(out, "%s: .asciz \"%s = %%d (uninitialized)\\n\"\n", print_syms[i].fmt_uninit, ST[si].name);
+        }
+    }
+
+    for (int i = 0; i < qn; i++) {
+        if (is_float_literal(Q[i].arg1) && !is_place(Q[i].arg1)) float_label_for(Q[i].arg1);
+        if (is_float_literal(Q[i].arg2) && !is_place(Q[i].arg2)) float_label_for(Q[i].arg2);
+    }
+
+    for (int i = 0; i < flit_cnt; i++)
+        fprintf(out, "%s: .double %.17g\n", flit_lbls[i], flit_vals[i]);
+
+    fprintf(out, "\n    .text\n");
+    fprintf(out, "    .globl main\n");
+    fprintf(out, "    .extern printf\n");
+    fprintf(out, "main:\n");
+
+    fprintf(out, "    pushq %%rbp\n");
+    fprintf(out, "    movq %%rsp, %%rbp\n");
+    fprintf(out, "    subq $%d, %%rsp\n", frame_size_bytes());
+
+    for (int i = 0; i < slot_cnt; i++)
+        fprintf(out, "    movq $0, %d(%%rbp)\n", slots[i].offset);
+
+    fprintf(out, "\n");
+
+    const char *l_done = "Ldone";
+    for (int i = 0; i < qn; i++)
+        emit_quad(out, &Q[i], l_done);
+
+    fprintf(out, "%s:\n", l_done);
+    emit_dump(out);
+    fprintf(out, "    xorl %%eax, %%eax\n");
+    fprintf(out, "    movq %%rbp, %%rsp\n");
+    fprintf(out, "    popq %%rbp\n");
+    fprintf(out, "    ret\n");
+
+    fclose(out);
 }
 
 %}
@@ -1351,6 +1826,7 @@ int main(int argc, char **argv)
         printf("\n[OK] Parsing and IR generation completed successfully.\n");
         printf("\n=== FINAL COMPLETE QUADRUPLE TABLE (Three-Address Code / IR) =========\n");
         print_summary();
+        generate_asm(argv[1]);
     }
 
     for (int i = 0; i < src_cnt; i++) free(src_lines[i]);

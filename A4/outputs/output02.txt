@@ -146,3 +146,8 @@
 | y                | int     |   0   | line 3      | end-of-prog  | yes     | t1           | active  |
 | z                | int     |   0   | line 4      | end-of-prog  | yes     | t5           | active  |
 +------------------+---------+-------+-------------+--------------+---------+--------------+---------+
+
+----- FINAL VARIABLE DUMP -----
+x = 8
+y = -8
+z = 4

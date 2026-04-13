@@ -93,3 +93,7 @@
 | score            | int     |   0   | line 2      | end-of-prog  | yes     | 75           | active  |
 | grade            | int     |   0   | line 3      | end-of-prog  | yes     | ?            | active  |
 +------------------+---------+-------+-------------+--------------+---------+--------------+---------+
+
+----- FINAL VARIABLE DUMP -----
+score = 75
+grade = 0

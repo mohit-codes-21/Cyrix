@@ -102,3 +102,7 @@
 | sum              | int     |   0   | line 2      | end-of-prog  | yes     | ?            | active  |
 | i                | int     |   0   | line 3      | end-of-prog  | yes     | ?            | active  |
 +------------------+---------+-------+-------------+--------------+---------+--------------+---------+
+
+----- FINAL VARIABLE DUMP -----
+sum = 8
+i = 5
