@@ -27,5 +27,5 @@ Assembly generation and execution are supported when running in WSL with GCC (Li
 
 - `simple.l` contains the lexer rules.
 - `simple.y` contains the grammar, SDT actions, and IR emission.
-- `tests/` holds input programs; `outputs/` stores expected outputs.
+- `tests/` holds input programs; `outputs/` stores outputs.
 - This assignment targets a small Simple language defined by the A4 spec. It is not the full Cyrix language from earlier work; extra Cyrix constructs were intentionally removed so the compiler covers only the required Simple constructs.

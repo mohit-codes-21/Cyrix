@@ -114,6 +114,8 @@ This report documents the design and implementation of an \textbf{Intermediate C
     \item Meaningful error diagnostics for semantic errors, with IR suppression on failure.
 \end{itemize}
 
+\noindent As an optional extension (for curiosity and verification), the same IR is lowered to x86-64 machine code in WSL and executed to print final variable values. This does not change the language or IR; it is a post-pass.
+
 \vspace{0.4cm}
 
 \noindent The pipeline is fully end-to-end: source text $\rightarrow$ lexer $\rightarrow$ parser $\rightarrow$ SDT actions $\rightarrow$ quad table $\rightarrow$ formatted output.
@@ -128,7 +130,7 @@ For this assignment the team designed a focused, C-like language called \textbf{
 
 \texttt{int}, \texttt{float}, \texttt{void}.
 
-\noindent \texttt{void} variables can be declared but cannot be assigned or used in expressions or conditions.
+\noindent \texttt{void} variables can be declared but cannot be assigned or used in expressions or conditions. In the optional machine-code backend, \texttt{float} values are represented as \textbf{double-precision} for simpler runtime printing.
 
 \subsection{Supported Constructs}
 
@@ -370,6 +372,7 @@ The compiler produces a rich, multi-section output for every source file:
     \end{enumerate}
     \item \textbf{Final complete quadruple table} --- all quads with source line annotation.
     \item \textbf{Final complete symbol table} --- all variables with full lifetime and scope information.
+    \item \textbf{Final variable dump (optional, machine-code run)} --- appended at the end of the output file under a banner.
 \end{enumerate}
 
 \subsection{Quadruple Table Format}
@@ -485,6 +488,42 @@ typedef struct {
 \end{itemize}
 
 % ════════════════════════════════════════════════════════════════════════
+% ════════════════════════════════════════════════════════════════════════
+\section{Part 5: Optional Machine Code Generation (WSL)}
+% ════════════════════════════════════════════════════════════════════════
+
+This part is not required by the assignment; it was added for curiosity and to validate the IR by executing real code. The backend is a post-pass over the quad table and does not change the grammar or SDT actions.
+
+\subsection{Target and Toolchain}
+
+The backend emits x86-64 (AMD64) assembly for the System V ABI and is built and run in WSL using GCC. This path is intentionally limited to WSL; native Windows shells are not supported.
+
+\subsection{Lowering Rules (Summary)}
+
+\begin{itemize}
+    \item Arithmetic: \texttt{+,-,*,/} map to \texttt{addsd/subsd/mulsd/divsd} for float and \texttt{addl/subl/imull/idivl} for int.
+    \item Comparisons: integer compares use \texttt{cmpl + setcc}; float compares use \texttt{ucomisd + setcc}.
+    \item Control flow: \texttt{ifFalse} and \texttt{goto} become conditional and unconditional jumps, and \texttt{label} emits assembly labels.
+    \item Casts: \texttt{itof} uses \texttt{cvtsi2sd}, and \texttt{ftoi} uses \texttt{cvttsd2si}.
+\end{itemize}
+
+\subsection{Float Handling}
+
+Although the source language uses \texttt{float}, the backend stores and computes all float values as \textbf{double-precision}. This simplifies \texttt{printf} calls in a varargs ABI and avoids mixed-size conversions.
+
+\subsection{Runtime Printing Policy}
+
+Instead of adding a new print statement to the language, the backend prints a final variable dump after program completion and appends it to the output file. A banner separates the runtime dump from the IR output. Uninitialized variables are printed with a tag, and memory is zero-initialized to keep the dump deterministic.
+
+\subsection{Scoping Bug and Fix}
+
+The IR stores variables by name only. In the first backend version, a name always mapped to the most recently allocated slot, which broke shadowing in nested scopes (e.g., test 08). The fix resolves a variable by checking its declaration line and scope end against the quad's source line, selecting the innermost symbol active at that line. This preserves correct scoping without modifying the IR.
+
+\subsection{Error Handling in Codegen}
+
+If any parse or semantic error occurs, the compiler suppresses IR output and does not emit assembly or executables. This prevents running incomplete or inconsistent code.
+
+% ════════════════════════════════════════════════════════════════════════
 \section{Test Cases}
 % ════════════════════════════════════════════════════════════════════════
 
@@ -540,6 +579,15 @@ e = d / 2;
 |   12 | e=t7        | =     | t7   | -    | e    | line 7  |
 \end{lstlisting}
 
+\textbf{Final variable dump (runtime):}
+\begin{lstlisting}[style=outputstyle]
+a = 5
+b = 10
+c = 15.000000
+d = 35
+e = 17
+\end{lstlisting}
+
 \subsubsection{Test 05 --- while Loop (Excerpt)}
 
 \textbf{Source:}
@@ -563,6 +611,12 @@ while (i < 5) {
 |    9 | i=t3              | =       | t3   | -    | i    | line 6  |
 |   10 | goto L1           | goto    | L1   | -    | -    | line 7  |
 |   11 | label L2          | label   | L2   | -    | -    | line 7  |
+\end{lstlisting}
+
+\textbf{Final variable dump (runtime):}
+\begin{lstlisting}[style=outputstyle]
+i = 5
+sum = 10
 \end{lstlisting}
 
 \subsubsection{Test 07 --- Nested if-else (Excerpt)}
@@ -597,6 +651,12 @@ else                   grade = 7;
 
 Each \texttt{goto} is correctly back-patched to its matching end-label via the LIFO \texttt{if\_goto\_stack}.
 
+\textbf{Final variable dump (runtime):}
+\begin{lstlisting}[style=outputstyle]
+marks = 82
+grade = 9
+\end{lstlisting}
+
 \subsubsection{Test 08 --- Scoping (Excerpt)}
 
 \textbf{Source:}
@@ -613,6 +673,13 @@ int result = x + y;  /* uses outer x=1 */
 
 The symbol table snapshot after the outer block closes correctly shows the inner \texttt{x} (scope 1) as \texttt{gone} and the outer \texttt{x} (scope 0) as \texttt{active}. The quad \texttt{(+, x, y, t4)} for \texttt{result} uses the outer \texttt{x=1}.
 
+\textbf{Final variable dump (runtime):}
+\begin{lstlisting}[style=outputstyle]
+x = 1
+y = 302
+result = 303
+\end{lstlisting}
+
 \subsubsection{Test 09 --- break and continue}
 
 \textbf{Source:}
@@ -628,6 +695,12 @@ for (i = 0; i < 10; i = i + 1) {
 \begin{lstlisting}[style=outputstyle]
 |   14 | goto L6   |  <- break:    jumps to Lend (L6), back-patched
 |   18 | goto L2   |  <- continue: jumps to Lupdate (L2)
+\end{lstlisting}
+
+\textbf{Final variable dump (runtime):}
+\begin{lstlisting}[style=outputstyle]
+sum = 8
+i = 5
 \end{lstlisting}
 
 \subsection{Tests 11--15: Error Handling}
@@ -657,6 +730,8 @@ for (i = 0; i < 10; i = i + 1) {
 [FAIL] 2 error(s) found. IR output suppressed.
 \end{lstlisting}
 
+Because errors suppress IR, the machine-code backend is also skipped and no assembly or executable is produced for these tests.
+
 \subsection{Test 16 --- Assignment PDF Example}
 
 \textbf{Source:}
@@ -675,6 +750,13 @@ a = b * -c + b * -c;
 |    7 | t4=b*t3       | *     | b    | t3   | t4   | line 4  |
 |    8 | t5=t2+t4      | +     | t2   | t4   | t5   | line 4  |
 |    9 | a=t5          | =     | t5   | -    | a    | line 4  |
+\end{lstlisting}
+
+\textbf{Final variable dump (runtime):}
+\begin{lstlisting}[style=outputstyle]
+a = -12
+b = 2
+c = 3
 \end{lstlisting}
 
 This is an exact match of the quadruple table shown in the assignment specification.
@@ -708,7 +790,8 @@ This is an exact match of the quadruple table shown in the assignment specificat
 sudo apt install bison flex   # one-time install
 make                          # build the compiler
 make tests                    # run all 16 tests, save outputs
-make run FILE=tests/test01.c  # run a single test
+make tests-asm                # generate .s + .exe for all valid tests (WSL)
+make tests-run                # run .exe and append runtime output (WSL)
 make clean                    # remove build artifacts
 \end{lstlisting}
 
@@ -723,7 +806,9 @@ LALR(1) parse + SDT
 $\xrightarrow{\text{emit\_q()}}$
 quad table
 $\xrightarrow{\text{print\_summary()}}$
-formatted output
+formatted IR output
+$\xrightarrow{\text{codegen (WSL)}}$
+\texttt{.s} $\rightarrow$ \texttt{gcc} $\rightarrow$ \texttt{.exe} $\rightarrow$ final variable dump
 \end{center}
 
 % ════════════════════════════════════════════════════════════════════════
@@ -737,7 +822,7 @@ formatted output
 \textbf{Team Member} & \textbf{Contribution} \\
 \midrule
 Bhavya Parmar & \textit{Rewrote the previous Cyrix grammar for this assignment (removed extra constructs).} \\[0.5cm]
-Mohit & \textit{SDT for basic constructs; type checking and implicit casting logic; IR output formatting and output verification.} \\[0.5cm]
+Mohit & \textit{SDT for basic constructs; type checking and implicit casting logic; IR output formatting; machine-code generation backend.} \\[0.5cm]
 Surriya Gokul & \textit{Control-flow SDT (if/else/loops) and back-patching logic checks.} \\[0.5cm]
 Tanishq Bhushan Chaudhari & \textit{Test suite creation (tests 01--16), output verification, and report write-up polishing.} \\
 \bottomrule
@@ -771,18 +856,21 @@ Tanishq Bhushan Chaudhari & \textit{Test suite creation (tests 01--16), output v
 \end{enumerate}
 
 % ════════════════════════════════════════════════════════════════════════
+
+% ════════════════════════════════════════════════════════════════════════
 \section{Conclusion}
 % ════════════════════════════════════════════════════════════════════════
 
-The Simple compiler correctly implements all four parts of Assignment 4:
+The Simple compiler correctly implements the four required parts of Assignment 4, plus an optional Part 5:
 
 \begin{itemize}
     \item \textbf{Part 1} --- IR generation for arithmetic, assignment, unary operators, and temporary variable generation, verified against the assignment PDF example.
     \item \textbf{Part 2} --- Extended IR for \texttt{if}, \texttt{if-else}, \texttt{while}, \texttt{for}, \texttt{break}, and \texttt{continue}, using Dragon Book back-patching.
     \item \textbf{Part 3} --- Clean tabular output with an \texttt{expr} column, a live symbol table after each statement, and a final complete quad table.
     \item \textbf{Part 4} --- Nine distinct error categories detected and reported clearly, with IR suppressed on any error.
+    \item \textbf{Part 5 (optional)} --- A WSL-only machine-code backend that executes the quads and prints final variable values for verification.
 \end{itemize}
 
-The compiler has been tested with 16 programs (10 standard + 5 erroneous + 1 PDF example) and all outputs have been verified correct. The system is ready for evaluation.
+The compiler has been tested with 16 programs (10 standard + 5 erroneous + 1 PDF example) and all outputs have been verified correct. The optional machine-code path further confirms correctness by matching runtime final values with the IR semantics.
 
 \end{document}
