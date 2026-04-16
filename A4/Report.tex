@@ -705,29 +705,104 @@ i = 5
 
 \subsection{Tests 11--15: Error Handling}
 
+The error-handling tests explicitly validate that the compiler detects semantic/lex/parse errors, buffers them, and suppresses IR output. The table below summarizes the intent, followed by the exact sources and the error messages observed in the output files.
+
 \begin{center}
 \renewcommand{\arraystretch}{1.3}
 \begin{tabular}{@{}clll@{}}
 \toprule
 \textbf{Test} & \textbf{Error Scenario} & \textbf{Errors Detected} & \textbf{Outcome} \\
 \midrule
-11 & Redeclaration of \texttt{x} in same scope + void init & 2 semantic errors & \texttt{[FAIL]}, IR suppressed \\
-12 & Use of undeclared \texttt{c} and \texttt{e} & 2 semantic errors & \texttt{[FAIL]}, IR suppressed \\
+11 & Redeclaration in same scope + void init & 2 semantic errors & \texttt{[FAIL]}, IR suppressed \\
+12 & Use of undeclared variables & 2 semantic errors & \texttt{[FAIL]}, IR suppressed \\
 13 & \texttt{break}/\texttt{continue} outside loop & 2 semantic errors & \texttt{[FAIL]}, IR suppressed \\
-14 & Unknown characters \texttt{@} and \texttt{\#} & 1 lex + 1 parse error & \texttt{[FAIL]}, IR suppressed \\
-15 & Mixed: scope redeclaration + undeclared var & 2 semantic errors & \texttt{[FAIL]}, IR suppressed \\
+14 & Unknown character in expression & 1 lex + 1 parse error & \texttt{[FAIL]}, IR suppressed \\
+15 & Mixed: inner redeclaration + undeclared var & 2 semantic errors & \texttt{[FAIL]}, IR suppressed \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\textbf{Example error output (test 11):}
+\subsubsection{Test 11 --- Redeclaration + void initialization}
+
+\textbf{Source:}
+\begin{lstlisting}[style=cstyle, language=C]
+int x = 5;
+int y = 10;
+int x = 20;
+void z = x + y;
+\end{lstlisting}
+
+\textbf{Errors reported:}
 \begin{lstlisting}[style=outputstyle]
-=== ERRORS DETECTED (2) =====================================
-    [Semantic Error] Line 4: 'x' already declared in this scope
-                                                     (first declared at line 2)
-    [Semantic Error] Line 5: void variable 'z' cannot be initialized
-======================================================================
-[FAIL] 2 error(s) found. IR output suppressed.
+[Semantic Error] Line 4: 'x' already declared in this scope (first declared at line 2)
+[Semantic Error] Line 5: void variable 'z' cannot be initialized
+\end{lstlisting}
+
+\subsubsection{Test 12 --- Use of undeclared variables}
+
+\textbf{Source:}
+\begin{lstlisting}[style=cstyle, language=C]
+int a = 10;
+int b = a + c;
+int d;
+d = b * e;
+\end{lstlisting}
+
+\textbf{Errors reported:}
+\begin{lstlisting}[style=outputstyle]
+[Semantic Error] Line 3: use of undeclared variable 'c'
+[Semantic Error] Line 5: use of undeclared variable 'e'
+\end{lstlisting}
+
+\subsubsection{Test 13 --- Control jumps outside loop}
+
+\textbf{Source:}
+\begin{lstlisting}[style=cstyle, language=C]
+int x = 5;
+break;
+int y = 10;
+continue;
+\end{lstlisting}
+
+\textbf{Errors reported:}
+\begin{lstlisting}[style=outputstyle]
+[Semantic Error] Line 3: 'break' outside a loop
+[Semantic Error] Line 5: 'continue' outside a loop
+\end{lstlisting}
+
+\subsubsection{Test 14 --- Unknown characters (lex + parse)}
+
+\textbf{Source:}
+\begin{lstlisting}[style=cstyle, language=C]
+int a = 5;
+int b = a @ 3;
+int c = b # 2;
+\end{lstlisting}
+
+\textbf{Errors reported:}
+\begin{lstlisting}[style=outputstyle]
+[Lex Error]    Line 3: unknown character '@'
+[Parse Error]  Line 3 near '3': syntax error, unexpected I_CONSTANT, expecting ';'
+\end{lstlisting}
+
+\subsubsection{Test 15 --- Mixed: redeclaration + undeclared variable}
+
+\textbf{Source:}
+\begin{lstlisting}[style=cstyle, language=C]
+int a = 1;
+int b = 2;
+{
+    int a = 10;
+    int a = 20;
+    b = a + q;
+}
+int result = a + b;
+\end{lstlisting}
+
+\textbf{Errors reported:}
+\begin{lstlisting}[style=outputstyle]
+[Semantic Error] Line 6: 'a' already declared in this scope (first declared at line 5)
+[Semantic Error] Line 7: use of undeclared variable 'q'
 \end{lstlisting}
 
 Because errors suppress IR, the machine-code backend is also skipped and no assembly or executable is produced for these tests.
